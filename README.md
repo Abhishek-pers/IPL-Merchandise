@@ -92,6 +92,7 @@ docker compose --profile full up -d --build   # web http://localhost:3000, API h
 ./scripts/dev.ps1 test   # backend unit + integration (Docker) + frontend
 # or double-click scripts\verify-local.cmd -> writes verify-log.txt
 node scripts/demo-concurrency.mjs   # live proof of exactly-once checkout + no overselling (API running, no Docker needed)
+node scripts/simulate-failures.mjs  # fault injection: races, lost requests/responses, DB connection killed (API running)
 ```
 
 **Using your own PostgreSQL instead of Docker:** edit `Database:ConnectionString` in
@@ -121,6 +122,8 @@ Every request carries an `X-Customer-Id` header, which stands in for authenticat
 | **No race conditions / lost updates** | `SELECT … FOR UPDATE` on the cart serialises one customer's writes. Stock uses an atomic conditional `UPDATE`. `xmin` optimistic token on products | `…never_oversell_limited_stock` |
 | **No overselling** | `UPDATE products SET stock = stock - q WHERE id = @id AND stock >= q` + `CHECK (stock >= 0)` | same |
 | **Exactly-once checkout** | `Idempotency-Key` header + UNIQUE `(customer_id, idempotency_key)` | `…same_idempotency_key_sent_concurrently_creates_exactly_one_order` |
+| **Exactly-once add to cart** | `Idempotency-Key` on `POST /cart/items`, recorded in `idempotency_keys` in the same transaction as the change | `…same_idempotency_key_on_add_to_cart_sent_concurrently_adds_exactly_once` |
+| **At-least-once delivery, no duplicates** | Client and server both retry; every effect is de-duplicated by key. No external I/O is done while a lock is held | `node scripts/simulate-failures.mjs`: 8 fault-injection scenarios (lost request, lost response, DB connection killed) |
 | **Retry on unexpected errors** | The whole transaction is re-run with backoff on transient DB errors (`ResilienceOptions`). The client retries only idempotent calls | `EfUnitOfWork`, `httpClient.test.ts` |
 | **Thread safety** | Stateless scoped services, immutable options snapshots, singletons are stateless or thread-safe | code review / [docs/04](docs/04-concurrency-idempotency-retry.md) |
 
