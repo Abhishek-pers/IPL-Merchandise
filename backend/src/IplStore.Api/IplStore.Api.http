@@ -1,0 +1,32 @@
+### IPL Store API - runnable requests (VS / Rider / VS Code REST Client)
+@api = http://localhost:5080/api/v1
+@customer = 11111111-1111-1111-1111-111111111111
+
+### Search products (name / type / franchise)
+GET {{api}}/products?search=jersey&franchise=CSK,MI&sort=PriceLowToHigh&page=1&pageSize=5
+
+### Product details (Mumbai Indians cap - deterministic id from seed)
+GET {{api}}/products?search=MI-CAP
+
+### Franchises & categories (filter drop-downs)
+GET {{api}}/franchises
+
+### Cart
+GET {{api}}/cart
+X-Customer-Id: {{customer}}
+
+### Add to cart (replace productId with one from the search result)
+POST {{api}}/cart/items
+X-Customer-Id: {{customer}}
+Content-Type: application/json
+
+{ "productId": "00000000-0000-0000-0000-000000000000", "quantity": 2 }
+
+### Checkout - send the SAME Idempotency-Key again: 200 + Idempotent-Replayed: true, no second order
+POST {{api}}/orders
+X-Customer-Id: {{customer}}
+Idempotency-Key: 7d6f1c1e-demo-key-0001
+
+### Order history
+GET {{api}}/orders
+X-Customer-Id: {{customer}}

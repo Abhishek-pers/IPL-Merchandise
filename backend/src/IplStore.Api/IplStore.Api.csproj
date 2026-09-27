@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- HTTP adapter + composition root. Controllers stay thin: translate HTTP <-> use-case
+       commands, nothing else. All DI wiring lives in Composition/. -->
+  <PropertyGroup>
+    <UserSecretsId>ipl-store-api</UserSecretsId>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\IplStore.Application\IplStore.Application.csproj" />
+    <ProjectReference Include="..\IplStore.Infrastructure\IplStore.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="IplStore.IntegrationTests" />
+  </ItemGroup>
+</Project>

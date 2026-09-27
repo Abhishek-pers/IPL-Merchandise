@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- End-to-end tests: real HTTP pipeline (WebApplicationFactory) + real PostgreSQL
+       (Testcontainers). Prove the concurrency guarantees: no duplicates, no overselling,
+       idempotent checkout. Needs Docker, OR set IPLSTORE_TEST_POSTGRES to an existing server. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\IplStore.Api\IplStore.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="FluentAssertions" />
+  </ItemGroup>
+</Project>

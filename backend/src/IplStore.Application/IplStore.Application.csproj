@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Use cases + ports (interfaces). Depends ONLY on Domain and tiny Microsoft.Extensions
+       abstractions. Knows nothing about HTTP, EF Core or PostgreSQL. -->
+  <ItemGroup>
+    <ProjectReference Include="..\IplStore.Domain\IplStore.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="IplStore.UnitTests" />
+  </ItemGroup>
+</Project>

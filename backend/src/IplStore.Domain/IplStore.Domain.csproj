@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The heart of the system. Pure C#: NO framework, ORM or infrastructure references.
+       If a using statement for EF/ASP.NET ever appears here, the architecture is broken. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="IplStore.UnitTests" />
+  </ItemGroup>
+</Project>

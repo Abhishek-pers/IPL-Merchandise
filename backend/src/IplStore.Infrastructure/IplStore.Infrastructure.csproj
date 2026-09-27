@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Adapters for the Application ports: EF Core + Npgsql (PostgreSQL), SQL migrations.
+       This is the ONLY project that knows which database we use. -->
+  <ItemGroup>
+    <ProjectReference Include="..\IplStore.Application\IplStore.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="EFCore.NamingConventions" />
+  </ItemGroup>
+
+  <!-- The SQL files in /database are the single source of truth for the schema. They are
+       embedded into this assembly so the running service (or the migrate-only job in CD)
+       can apply them without shipping loose files. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\database\migrations\*.sql"
+                      LogicalName="migrations/%(Filename)%(Extension)"
+                      Link="Database\migrations\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\..\database\seed\*.sql"
+                      LogicalName="seed/%(Filename)%(Extension)"
+                      Link="Database\seed\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="IplStore.IntegrationTests" />
+    <InternalsVisibleTo Include="IplStore.UnitTests" />
+  </ItemGroup>
+</Project>

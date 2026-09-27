@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Fast, isolated tests: Domain rules + Application use cases with in-memory fakes.
+       No database, no network, no Docker. Run on every commit. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\IplStore.Application\IplStore.Application.csproj" />
+    <ProjectReference Include="..\..\src\IplStore.Infrastructure\IplStore.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="FluentAssertions" />
+  </ItemGroup>
+</Project>
