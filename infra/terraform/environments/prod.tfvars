@@ -1,0 +1,11 @@
+environment                    = "prod"
+postgres_sku                   = "GP_Standard_D4ds_v5"
+postgres_storage_mb            = 131072
+postgres_high_availability     = true # zone-redundant standby, automatic failover
+postgres_read_replica          = true # catalogue reads offloaded from the primary
+postgres_backup_retention_days = 35
+postgres_geo_redundant_backup  = true
+api_min_replicas               = 2 # never below 2 -> survives a replica / zone loss
+api_max_replicas               = 20
+api_cpu                        = 1
+api_memory                     = "2Gi"
