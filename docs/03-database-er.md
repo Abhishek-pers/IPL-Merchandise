@@ -117,6 +117,7 @@ On top of it sit **deliberate denormalisations**, each with a named reason and a
 | `cart_items.customer_id`, `order_items.customer_id` | **Distribution key.** With Citus, child rows are co-located on the same shard as their parent (docs/06) | Copied by the aggregate root on creation |
 
 This follows the standard rule: *normalise for writes, denormalise for reads, and write down who keeps each copy in sync.*
+Column-by-column detail, trigger flow and sample rows: [11 Denormalised table structure](11-denormalised-tables.md).
 
 ## 3.3 Constraints = correctness under concurrency
 

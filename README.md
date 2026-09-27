@@ -124,6 +124,31 @@ Every request carries an `X-Customer-Id` header, which stands in for authenticat
 | **Retry on unexpected errors** | The whole transaction is re-run with backoff on transient DB errors (`ResilienceOptions`). The client retries only idempotent calls | `EfUnitOfWork`, `httpClient.test.ts` |
 | **Thread safety** | Stateless scoped services, immutable options snapshots, singletons are stateless or thread-safe | code review / [docs/04](docs/04-concurrency-idempotency-retry.md) |
 
+### Database: normalised write model + denormalised read model
+
+Writes go to **normalised (3NF) tables**: `products`, `franchises`, `product_categories`, `customers`, `carts`, `cart_items`, `orders`, `order_items`.
+Catalogue reads (more than 95% of traffic) go to **one flat, pre-joined table**, `product_catalog`, so list, search and details need **no joins**.
+
+```
+ products ─┐                                    ┌─────────────── product_catalog (read model) ───────────────┐
+           │  AFTER INSERT/UPDATE triggers      │ product_id  sku  name  description  price  currency        │
+ franchises├──── same transaction ───────────►  │ stock_quantity  is_active  image_url  attributes (jsonb)   │
+           │  (project_product upsert)          │ franchise_id  franchise_code  franchise_name  franchise_color │
+ product_  │                                    │ category_id  category_code  category_name                  │
+ categories┘                                    │ created_at  updated_at  search_text (GENERATED, trigram)   │
+                                                └────────────────────────────────────────────────────────────┘
+```
+
+| Denormalised data | Why | Kept correct by |
+|---|---|---|
+| `product_catalog` (whole table) | Flat row per product, every filter indexed, replica-ready | Triggers on `products` / `franchises` / `product_categories`, **in the same transaction** |
+| `product_catalog.search_text` | One GIN trigram index serves search by name, type or franchise | `GENERATED ALWAYS … STORED` |
+| `order_items.{sku, product_name, franchise_name, category_name, unit_price}` | An order shows what was bought at the price paid, even after later changes | Written once at checkout |
+| `orders.{customer_name, customer_email, item_count}` | Order history renders without joins | Written once at checkout |
+| `cart_items.customer_id`, `order_items.customer_id` | Shard key: a customer's rows stay on one shard | Copied by the aggregate root |
+
+**Full column-by-column structure, indexes, sync triggers, sample rows and trade-offs:** [docs/11 Denormalised table structure](docs/11-denormalised-tables.md).
+
 ## 4. Repository map
 
 ```
@@ -163,6 +188,7 @@ Every request carries an `X-Customer-Id` header, which stands in for authenticat
 | [08 Change playbook](docs/08-change-playbook.md) | **How to make common changes quickly and cleanly (for the live review)** |
 | [09 Review guide](docs/09-review-guide.md) | Walkthrough order, trade-offs, likely questions |
 | [10 Design document](docs/10-design-document.md) | **Everything in one place: code flow, sequence diagrams, DB, trade-offs and a demo playbook** |
+| [11 Denormalised tables](docs/11-denormalised-tables.md) | `product_catalog` read model column by column, sync triggers, indexes, order snapshots, trade-offs |
 | [ADRs](docs/adr) | Why each key decision was made |
 
 ## 6. Tunable parameters (no code changes)
