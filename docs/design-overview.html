@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IPL Store Blueprint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#F5F7F3;--surface:#FFFFFF;--ink:#14213D;--text:#26302B;--muted:#5B6660;--line:#DCE1DA;--accent:#2F6B4F;--accent-soft:#E3EFE7;--ball:#B23A2E;
+--display:"Barlow Condensed","Arial Narrow",sans-serif;--body:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0F1512;--surface:#16201B;--ink:#E8EEF0;--text:#D7DED9;--muted:#95A39B;--line:#2A3630;--accent:#6FBF95;--accent-soft:#1D2E25;--ball:#E07A6E}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0F1512;--surface:#16201B;--ink:#E8EEF0;--text:#D7DED9;--muted:#95A39B;--line:#2A3630;--accent:#6FBF95;--accent-soft:#1D2E25;--ball:#E07A6E}
+body{background:var(--bg);color:var(--text);font:15px/1.6 var(--body)}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 64px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:40px}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px);align-self:start;display:flex;flex-direction:column;gap:6px;font-size:13px}
+nav.toc a{color:var(--muted);text-decoration:none;padding:3px 0 3px 10px;border-left:2px solid var(--line)}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent);border-left-color:var(--accent);outline:none}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:700 clamp(40px,6vw,64px)/1 var(--display);color:var(--ink);margin:8px 0 12px;letter-spacing:.01em;text-wrap:balance}
+h2{font:700 30px/1.1 var(--display);color:var(--ink);margin:0 0 6px;letter-spacing:.02em;text-wrap:balance}
+h3{font:600 15px var(--body);color:var(--ink);margin:18px 0 8px}
+p{max-width:68ch;margin:0 0 12px}
+.lede{font-size:17px;color:var(--muted);max-width:62ch}
+main{display:flex;flex-direction:column;gap:56px;min-width:0}
+section{display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px}
+.stack{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{font:500 12px var(--mono);padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text)}
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;overflow-x:auto}
+.diagram pre{margin:0;background:none}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--accent-soft)}
+tr:last-child td{border-bottom:none}
+code{font:13px var(--mono);background:var(--accent-soft);padding:1px 5px;border-radius:4px;color:var(--ink)}
+.scorecard{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:18px}
+.scorecard div{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.scorecard b{font:700 28px/1 var(--display);color:var(--ink);font-variant-numeric:tabular-nums}
+.scorecard span{font-size:12.5px;color:var(--muted)}
+.guard{color:var(--ball);font-weight:600}
+@media (max-width:820px){.wrap{grid-template-columns:1fr;gap:24px}nav.toc{position:static;flex-direction:row;flex-wrap:wrap;gap:4px 12px}nav.toc a{border-left:none;padding:0}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="Sections">
+<a href="#overview">Overview</a><a href="#layers">Layers</a><a href="#checkout">Checkout flow</a><a href="#domain">Domain UML</a><a href="#ports">Ports &amp; adapters</a><a href="#er">ER model</a><a href="#guarantees">Guarantees</a><a href="#retry">Retry</a><a href="#distributed">Distribution</a><a href="#cloud">Cloud &amp; CI/CD</a><a href="#change">Change playbook</a>
+</nav>
+<main>
+<section id="overview">
+<div class="eyebrow">Senior Software Engineer assessment · design</div>
+<h1>IPL Franchise Store blueprint</h1>
+<p class="lede">An e-commerce store for official IPL merchandise: jerseys, caps, flags, autographed photos and accessories from all ten franchises. .NET 8 Web API on Clean Architecture, EF Core over PostgreSQL 16, and a plain React client. It is designed so a race, a retry or a live requirement change never breaks correctness.</p>
+<div class="stack"><span class="chip">ASP.NET Core 8</span><span class="chip">EF Core 8 + Npgsql</span><span class="chip">PostgreSQL 16</span><span class="chip">React 18 + TS</span><span class="chip">xUnit · Testcontainers · Vitest</span><span class="chip">Terraform · Azure</span><span class="chip">GitHub Actions</span></div>
+<div class="scorecard">
+<div><b>10</b><span>franchises, CSK to LSG</span></div>
+<div><b>60</b><span>seeded products, 5 categories</span></div>
+<div><b>4</b><span>layers, dependencies inward</span></div>
+<div><b>6</b><span>UNIQUE / CHECK constraints guarding races</span></div>
+<div><b>3</b><span>pipelines: CI, app CD, infra CD</span></div>
+</div>
+<div class="tablewrap" style="margin-top:18px"><table>
+<tr><th>#</th><th>Requirement</th><th>API</th><th>Core</th></tr>
+<tr><td>1</td><td>Product list with prices</td><td><code>GET /api/v1/products</code></td><td>CatalogService → product_catalog read model</td></tr>
+<tr><td>2</td><td>Product details</td><td><code>GET /api/v1/products/{id}</code></td><td>CatalogQueries.GetDetailsAsync</td></tr>
+<tr><td>3</td><td>Search by name, type, franchise</td><td><code>?search=&amp;franchise=&amp;category=&amp;sort=</code></td><td>ICatalogFilter pipeline + trigram index</td></tr>
+<tr><td>4</td><td>Cart</td><td><code>/api/v1/cart/items</code></td><td>Cart aggregate + row lock</td></tr>
+<tr><td>5</td><td>Order history</td><td><code>POST/GET /api/v1/orders</code></td><td>Idempotent CheckoutService, denormalised orders</td></tr>
+</table></div>
+</section>
+
+<section id="layers"><div class="eyebrow">Architecture</div><h2>Clean Architecture, dependencies point inward</h2>
+<p>Domain has zero dependencies. Application owns the use cases and the interfaces (ports). Infrastructure implements them with EF Core and PostgreSQL. The API is a thin HTTP adapter and the single composition root where DI and options binding live.</p>
+<div class="diagram"><pre class="mermaid">flowchart TB
+    subgraph Api[&quot;IplStore.Api (HTTP adapter + composition root)&quot;]
+        C[Controllers] --&gt; EH[GlobalExceptionHandler]
+        CR[CompositionRoot&lt;br/&gt;DI + options binding]
+    end
+    subgraph Infra[&quot;IplStore.Infrastructure (adapters)&quot;]
+        R[Repositories] --&gt; DB[StoreDbContext / ReadOnlyStoreDbContext]
+        Q[Queries + ICatalogFilter pipeline] --&gt; DB
+        UOW[EfUnitOfWork&lt;br/&gt;tx + retry]
+        MIG[SqlScriptDatabaseMigrator]
+    end
+    subgraph App[&quot;IplStore.Application (use cases + ports)&quot;]
+        S[CatalogService · CartService&lt;br/&gt;CheckoutService · OrderService]
+        P[[Ports: IUnitOfWork, ICartRepository,&lt;br/&gt;IProductRepository, IOrderRepository,&lt;br/&gt;ICatalogQueries, IOrderQueries ...]]
+        PR[IPricingPolicy → StandardPricingPolicy]
+        O[Options: Pricing, Cart, Checkout, Catalog, Paging]
+    end
+    subgraph Dom[&quot;IplStore.Domain (no dependencies)&quot;]
+        E[Cart · CartItem · Order · OrderItem&lt;br/&gt;Product · Franchise · ProductCategory · Customer]
+        BR[Business rules + DomainException codes]
+    end
+    Api --&gt; App
+    Api --&gt; Infra
+    Infra --&gt; App
+    App --&gt; Dom
+    Infra -. implements .-&gt; P
+</pre></div></section>
+
+<section id="checkout"><div class="eyebrow">Request flow</div><h2>Checkout in one retried transaction</h2>
+<p>Lock the customer's cart, check the idempotency key, reserve stock with one conditional <code>UPDATE</code> per line in id order, snapshot the lines, price with the same strategy the cart preview uses, then commit. Any failure rolls back every reservation.</p>
+<div class="diagram"><pre class="mermaid">sequenceDiagram
+    autonumber
+    participant UI as React CartPage
+    participant C as OrdersController
+    participant S as CheckoutService
+    participant U as EfUnitOfWork
+    participant DB as PostgreSQL
+    UI-&gt;&gt;C: POST /api/v1/orders&lt;br/&gt;X-Customer-Id, Idempotency-Key: K
+    C-&gt;&gt;S: PlaceOrderAsync(PlaceOrderCommand)
+    S-&gt;&gt;U: ExecuteInTransactionAsync(work)
+    loop retried as a whole on transient errors (ResilienceOptions)
+        U-&gt;&gt;DB: BEGIN (READ COMMITTED)
+        S-&gt;&gt;DB: INSERT carts ... ON CONFLICT DO NOTHING
+        S-&gt;&gt;DB: SELECT ... FROM carts WHERE customer_id=@c FOR UPDATE
+        S-&gt;&gt;DB: SELECT order WHERE (customer, K)  -- replay?
+        S-&gt;&gt;DB: UPDATE products SET stock=stock-q WHERE id=@p AND stock&gt;=q (per line, ordered by id)
+        S-&gt;&gt;DB: INSERT orders, order_items · DELETE cart_items
+        Note over DB: triggers refresh product_catalog (same tx)
+        U-&gt;&gt;DB: COMMIT
+    end
+    S--&gt;&gt;C: CheckoutResult(order, isReplay)
+    C--&gt;&gt;UI: 201 Created (or 200 + Idempotent-Replayed: true)
+</pre></div></section>
+
+<section id="domain"><div class="eyebrow">UML</div><h2>Domain model</h2>
+<p>Cart and Order are aggregate roots. Limits come in as a <code>CartPolicy</code> parameter object, and orders are built only through the <code>Order.Place</code> factory.</p>
+<div class="diagram"><pre class="mermaid">classDiagram
+    direction LR
+
+    class Franchise {
+        +Guid Id
+        +string Code
+        +string Name
+        +string City
+        +string PrimaryColor
+    }
+    class ProductCategory {
+        +Guid Id
+        +string Code
+        +string Name
+    }
+    class Product {
+        +Guid Id
+        +string Sku
+        +string Name
+        +decimal Price
+        +string Currency
+        +int StockQuantity
+        +bool IsActive
+        +uint Version  «xmin»
+        +CanFulfil(qty) bool
+        +Deactivate()
+    }
+    class Customer {
+        +Guid Id
+        +string Email
+        +string FullName
+    }
+    class Cart {
+        &lt;&lt;aggregate root&gt;&gt;
+        +Guid Id
+        +Guid CustomerId
+        +DateTimeOffset UpdatedAt
+        +IReadOnlyCollection~CartItem~ Items
+        +bool IsEmpty
+        +AddItem(productId, qty, CartPolicy, now) CartItem
+        +SetItemQuantity(productId, qty, CartPolicy, now)
+        +RemoveItem(productId, now)
+        +Clear(now)
+    }
+    class CartItem {
+        +Guid Id
+        +Guid CartId
+        +Guid CustomerId  «shard key»
+        +Guid ProductId
+        +int Quantity
+    }
+    class CartPolicy {
+        &lt;&lt;value object&gt;&gt;
+        +int MaxQuantityPerLine
+        +int MaxDistinctLines
+    }
+    class Order {
+        &lt;&lt;aggregate root&gt;&gt;
+        +Guid Id
+        +string OrderNumber
+        +Guid CustomerId
+        +string IdempotencyKey
+        +OrderStatus Status
+        +decimal Subtotal / Tax / Shipping / Total
+        +int ItemCount  «denormalised»
+        +string CustomerName / CustomerEmail «snapshot»
+        +Place(OrderPlacement)$ Order
+    }
+    class OrderItem {
+        +Guid ProductId
+        +string Sku / ProductName / FranchiseName / CategoryName «snapshot»
+        +decimal UnitPrice
+        +int Quantity
+        +decimal LineTotal
+    }
+    class OrderPlacement {
+        &lt;&lt;parameter object&gt;&gt;
+    }
+    class OrderLine {
+        &lt;&lt;value object&gt;&gt;
+        +decimal LineTotal
+    }
+    class PriceBreakdown {
+        &lt;&lt;value object&gt;&gt;
+        +decimal Subtotal
+        +decimal Tax
+        +decimal Shipping
+        +decimal Total
+    }
+    class OrderStatus {
+        &lt;&lt;enumeration&gt;&gt;
+        Placed
+        Paid
+        Shipped
+        Delivered
+        Cancelled
+    }
+
+    Product &quot;*&quot; --&gt; &quot;1&quot; Franchise
+    Product &quot;*&quot; --&gt; &quot;1&quot; ProductCategory
+    Customer &quot;1&quot; -- &quot;0..1&quot; Cart
+    Cart &quot;1&quot; *-- &quot;*&quot; CartItem
+    CartItem &quot;*&quot; ..&gt; &quot;1&quot; Product : ProductId
+    Cart ..&gt; CartPolicy : uses
+    Customer &quot;1&quot; -- &quot;*&quot; Order
+    Order &quot;1&quot; *-- &quot;1..*&quot; OrderItem
+    Order ..&gt; OrderPlacement : built from
+    OrderPlacement o-- OrderLine
+    OrderPlacement o-- PriceBreakdown
+    Order --&gt; OrderStatus
+</pre></div></section>
+
+<section id="ports"><div class="eyebrow">UML</div><h2>Ports &amp; adapters</h2>
+<div class="diagram"><pre class="mermaid">classDiagram
+    direction TB
+    class ICheckoutService {
+        &lt;&lt;interface&gt;&gt;
+        +PlaceOrderAsync(PlaceOrderCommand) CheckoutResult
+    }
+    class ICartService {
+        &lt;&lt;interface&gt;&gt;
+        +GetAsync()
+        +AddItemAsync()
+        +UpdateItemAsync()
+        +RemoveItemAsync()
+    }
+    class ICatalogService {
+        &lt;&lt;interface&gt;&gt;
+        +SearchAsync(SearchProductsQuery)
+        +GetProductAsync(id)
+    }
+    class IOrderService {
+        &lt;&lt;interface&gt;&gt;
+        +ListAsync()
+        +GetAsync()
+    }
+
+    class IUnitOfWork {
+
+        &lt;&lt;interface&gt;&gt;
+
+        +ExecuteInTransactionAsync(work)
+
+    }
+    class ICartRepository {
+        &lt;&lt;interface&gt;&gt;
+        +GetOrCreateForUpdateAsync(customerId) Cart
+    }
+    class IProductRepository {
+        &lt;&lt;interface&gt;&gt;
+        +FindAsync()
+        +GetWithReferencesAsync()
+        +TryReserveStockAsync() bool
+    }
+    class IOrderRepository {
+        &lt;&lt;interface&gt;&gt;
+        +FindByIdempotencyKeyAsync()
+        +Add(Order)
+    }
+    class ICatalogQueries {
+        &lt;&lt;interface&gt;&gt;
+        +SearchAsync(criteria, page)
+        +GetDetailsAsync()
+    }
+    class IOrderQueries {
+        &lt;&lt;interface&gt;&gt;
+        +ListAsync()
+        +GetAsync()
+    }
+    class ICartQueries {
+        &lt;&lt;interface&gt;&gt;
+        +GetAsync(customerId) CartView
+    }
+    class IPricingPolicy {
+        &lt;&lt;interface&gt;&gt;
+        +Calculate(PricingRequest) PriceBreakdown
+    }
+    class IOrderNumberGenerator {
+        &lt;&lt;interface&gt;&gt;
+        +Next(placedAt) string
+    }
+    class ICatalogFilter {
+        &lt;&lt;interface&gt;&gt;
+        +Apply(query, criteria)
+    }
+
+    CheckoutService ..|&gt; ICheckoutService
+    CartService ..|&gt; ICartService
+    CatalogService ..|&gt; ICatalogService
+    OrderService ..|&gt; IOrderService
+    StandardPricingPolicy ..|&gt; IPricingPolicy
+
+    CheckoutService --&gt; IUnitOfWork
+    CheckoutService --&gt; ICartRepository
+    CheckoutService --&gt; IProductRepository
+    CheckoutService --&gt; IOrderRepository
+    CheckoutService --&gt; IPricingPolicy
+    CheckoutService --&gt; IOrderNumberGenerator
+    CartService --&gt; ICartQueries
+    CatalogService --&gt; ICatalogQueries
+
+    EfUnitOfWork ..|&gt; IUnitOfWork
+    CartRepository ..|&gt; ICartRepository
+    ProductRepository ..|&gt; IProductRepository
+    OrderRepository ..|&gt; IOrderRepository
+    CatalogQueries ..|&gt; ICatalogQueries
+    CatalogQueries --&gt; &quot;*&quot; ICatalogFilter
+    OrderQueries ..|&gt; IOrderQueries
+    CartQueries ..|&gt; ICartQueries
+    OrderNumberGenerator ..|&gt; IOrderNumberGenerator
+    SearchTermFilter ..|&gt; ICatalogFilter
+    FranchiseFilter ..|&gt; ICatalogFilter
+    CategoryFilter ..|&gt; ICatalogFilter
+    PriceRangeFilter ..|&gt; ICatalogFilter
+    InStockFilter ..|&gt; ICatalogFilter
+</pre></div></section>
+
+<section id="er"><div class="eyebrow">Database</div><h2>ER model: normalised writes, denormalised reads</h2>
+<p>The write model is in 3NF. <code>product_catalog</code> is a flat, trigger-maintained projection updated in the same transaction. <code>order_items</code> snapshot what was bought, and <code>customer_id</code> is copied onto child rows as the future shard key.</p>
+<div class="diagram"><pre class="mermaid">erDiagram
+    FRANCHISES ||--o{ PRODUCTS : &quot;sells&quot;
+    PRODUCT_CATEGORIES ||--o{ PRODUCTS : &quot;classifies&quot;
+    PRODUCTS ||--|| PRODUCT_CATALOG : &quot;projected into (trigger)&quot;
+    CUSTOMERS ||--o| CARTS : &quot;owns (max 1)&quot;
+    CARTS ||--o{ CART_ITEMS : &quot;contains&quot;
+    PRODUCTS ||--o{ CART_ITEMS : &quot;referenced by&quot;
+    CUSTOMERS ||--o{ ORDERS : &quot;places&quot;
+    ORDERS ||--|{ ORDER_ITEMS : &quot;contains&quot;
+
+    FRANCHISES {
+        uuid id PK
+        varchar code UK &quot;CSK, MI ...&quot;
+        varchar name
+        varchar city
+        char primary_color
+    }
+    PRODUCT_CATEGORIES {
+        uuid id PK
+        varchar code UK &quot;JERSEY, CAP ...&quot;
+        varchar name
+    }
+    PRODUCTS {
+        uuid id PK
+        varchar sku UK
+        varchar name
+        text description
+        uuid franchise_id FK
+        uuid category_id FK
+        numeric price &quot;CHECK &gt;= 0&quot;
+        char currency
+        int stock_quantity &quot;CHECK &gt;= 0&quot;
+        jsonb attributes &quot;sizes, material, signed_by&quot;
+        bool is_active
+        timestamptz updated_at &quot;trigger-maintained&quot;
+    }
+    PRODUCT_CATALOG {
+        uuid product_id PK &quot;FK products&quot;
+        varchar name
+        numeric price
+        int stock_quantity
+        varchar franchise_code &quot;denormalised&quot;
+        varchar franchise_name &quot;denormalised&quot;
+        varchar category_code &quot;denormalised&quot;
+        varchar category_name &quot;denormalised&quot;
+        text search_text &quot;GENERATED, trigram-indexed&quot;
+    }
+    CUSTOMERS {
+        uuid id PK
+        varchar email UK &quot;lower(email)&quot;
+        varchar full_name
+    }
+    CARTS {
+        uuid id PK
+        uuid customer_id FK,UK &quot;one cart per customer&quot;
+        timestamptz updated_at
+    }
+    CART_ITEMS {
+        uuid id PK
+        uuid cart_id FK
+        uuid customer_id &quot;denormalised shard key&quot;
+        uuid product_id FK
+        int quantity &quot;CHECK &gt; 0&quot;
+    }
+    ORDERS {
+        uuid id PK
+        varchar order_number UK
+        uuid customer_id FK
+        varchar idempotency_key &quot;UK with customer_id&quot;
+        varchar status &quot;CHECK in (...)&quot;
+        numeric subtotal
+        numeric tax
+        numeric shipping
+        numeric total &quot;CHECK = subtotal+tax+shipping&quot;
+        int item_count &quot;denormalised&quot;
+        varchar customer_name &quot;snapshot&quot;
+        varchar customer_email &quot;snapshot&quot;
+        timestamptz placed_at
+    }
+    ORDER_ITEMS {
+        uuid id PK
+        uuid order_id FK
+        uuid customer_id &quot;denormalised shard key&quot;
+        uuid product_id &quot;no FK - history outlives catalogue&quot;
+        varchar sku &quot;snapshot&quot;
+        varchar product_name &quot;snapshot&quot;
+        varchar franchise_name &quot;snapshot&quot;
+        varchar category_name &quot;snapshot&quot;
+        numeric unit_price
+        int quantity
+        numeric line_total &quot;CHECK = unit_price*quantity&quot;
+    }
+</pre></div></section>
+
+<section id="guarantees"><div class="eyebrow">Correctness</div><h2>Race conditions and how each one is handled</h2>
+<div class="tablewrap"><table>
+<tr><th>Hazard</th><th>Mechanism</th><th>Backstop</th></tr>
+<tr><td>Two carts for one customer</td><td><code>INSERT … ON CONFLICT DO NOTHING</code></td><td class="guard">uq_carts_customer</td></tr>
+<tr><td>Duplicate line / lost quantity</td><td><code>SELECT … FOR UPDATE</code> on the cart row</td><td class="guard">uq_cart_items_cart_product</td></tr>
+<tr><td>Overselling</td><td><code>UPDATE … WHERE stock_quantity &gt;= @q</code></td><td class="guard">CHECK stock ≥ 0</td></tr>
+<tr><td>Double checkout</td><td><code>Idempotency-Key</code>, checked after the lock</td><td class="guard">uq_orders_customer_idempotency</td></tr>
+<tr><td>Deadlock between checkouts</td><td>Locks taken in ascending product id</td><td>retry on 40P01</td></tr>
+<tr><td>Lost admin edit</td><td><code>xmin</code> concurrency token</td><td>409 Conflict</td></tr>
+<tr><td>5 replicas migrating at once</td><td><code>pg_advisory_lock</code> + checksums</td><td class="guard">schema_migrations PK</td></tr>
+</table></div></section>
+
+<section id="retry"><div class="eyebrow">Resilience</div><h2>What is retried, and why it's safe</h2>
+<p>The browser retries only idempotent calls or keyed POSTs. The API re-runs the whole transaction on transient PostgreSQL errors, with backoff from <code>ResilienceOptions</code>. If a commit is ambiguous, the idempotency key turns the re-run into a replay.</p>
+<div class="diagram"><pre class="mermaid">flowchart LR
+    subgraph Browser
+        A[httpClient] --&gt;|GET/PUT/DELETE or POST with Idempotency-Key&lt;br/&gt;on network error / 408 / 429 / 5xx&lt;br/&gt;exp. backoff + full jitter, max 3| A
+    end
+    subgraph API
+        U[EfUnitOfWork] --&gt;|whole transaction on transient DB errors&lt;br/&gt;40001, 40P01, 57P0x, 53xxx, socket/timeout&lt;br/&gt;exp. backoff, MaxRetryCount=3| U
+        M[Migrator] --&gt;|DB not reachable at start-up&lt;br/&gt;StartupConnectAttempts=15| M
+    end
+    A --&gt; U
+</pre></div></section>
+
+<section id="distributed"><div class="eyebrow">Scale</div><h2>Distributed database path</h2>
+<p>Zone-redundant HA gives RPO 0. An async read replica serves catalogue browsing through <code>ReadOnlyStoreDbContext</code>, while carts and orders read the primary for read-your-writes. Next steps are Citus sharding by <code>customer_id</code> and monthly partitions for orders.</p>
+<div class="diagram"><pre class="mermaid">flowchart TB
+    subgraph AZ1[Availability zone 1]
+        P[(Primary&lt;br/&gt;read-write)]
+    end
+    subgraph AZ2[Availability zone 2]
+        S[(Hot standby&lt;br/&gt;synchronous)]
+    end
+    subgraph AZ3[Availability zone 3]
+        R[(Read replica&lt;br/&gt;asynchronous)]
+    end
+    API1[API replica 1] &amp; API2[API replica N] --&gt;|StoreDbContext&lt;br/&gt;commands, cart, orders| P
+    API1 &amp; API2 -.-&gt;|ReadOnlyStoreDbContext&lt;br/&gt;catalogue browse/search| R
+    P ==&gt;|sync WAL: RPO = 0, auto-failover| S
+    P --&gt;|async WAL: ms lag| R
+    P --&gt;|geo-redundant backups| GRS[(Paired region)]
+</pre></div></section>
+
+<section id="cloud"><div class="eyebrow">Delivery</div><h2>Azure footprint and pipelines</h2>
+<div class="diagram"><pre class="mermaid">flowchart LR
+    user([Fans]) --&gt; SWA[Static Web Apps&lt;br/&gt;React SPA on global CDN]
+    user --&gt; ING[Container Apps ingress&lt;br/&gt;TLS]
+    SWA -. /api calls .-&gt; ING
+    ING --&gt; API[Container Apps: API&lt;br/&gt;2..20 replicas, KEDA HTTP scaling&lt;br/&gt;revisions = blue/green]
+    JOB[Container Apps Job&lt;br/&gt;--migrate-only] --&gt; PG
+    API --&gt; PG[(PostgreSQL Flexible 16&lt;br/&gt;zone-redundant HA)]
+    API -.-&gt; RR[(Read replica)]
+    API --&gt; KV[Key Vault&lt;br/&gt;connection strings]
+    API --&gt; AI[App Insights + Log Analytics]
+    ACR[Container Registry] --&gt; API
+    ACR --&gt; JOB
+    MI[Managed identity] --- API
+    MI --- JOB
+</pre></div>
+<p style="margin-top:12px">Infrastructure (Terraform) and application releases ship through separate pipelines. Terraform ignores the container image; the app pipeline builds once, runs the migration job, then shifts traffic blue/green between revisions.</p>
+<div class="diagram"><pre class="mermaid">flowchart LR
+    PR[Pull request] --&gt; CI
+    subgraph CI[ci.yml - every PR and push]
+        B[backend: restore, build -warnaserror,&lt;br/&gt;unit tests + coverage] --&gt; IT[integration tests&lt;br/&gt;Testcontainers PostgreSQL]
+        F[frontend: typecheck, vitest, build]
+        B &amp; F --&gt; IMG[docker build api + web]
+    end
+    CI --&gt;|merge to main| CDAPP
+    subgraph CDAPP[cd-app.yml]
+        BUILD[build image once&lt;br/&gt;tag = git SHA → ACR] --&gt; DEV[deploy dev] --&gt; GATE{{manual approval}} --&gt; PROD[deploy prod]
+    end
+    subgraph DEPLOY[deploy-environment.yml, per env]
+        M1[1. migration job] --&gt; M2[2. new revision at 0%] --&gt; M3[3. smoke test revision URL] --&gt; M4[4. shift 100%] --&gt; M5[5. deploy SPA]
+    end
+    DEV -.-&gt; DEPLOY
+    PROD -.-&gt; DEPLOY
+</pre></div></section>
+
+<section id="change"><div class="eyebrow">For the live review</div><h2>Change playbook</h2>
+<div class="tablewrap"><table>
+<tr><th>Ask</th><th>Change</th></tr>
+<tr><td>GST 12%, free shipping above ₹1,499</td><td><code>Pricing:TaxRate</code>, <code>Pricing:FreeShippingThreshold</code> (config, hot-reloaded)</td></tr>
+<tr><td>Max 4 per product</td><td><code>Cart:MaxQuantityPerLine = 4</code></td></tr>
+<tr><td>More DB retries</td><td><code>Resilience:MaxRetryCount</code></td></tr>
+<tr><td>New product type</td><td>One INSERT in a new <code>V004__*.sql</code></td></tr>
+<tr><td>New search filter</td><td>New <code>ICatalogFilter</code> class + one DI line</td></tr>
+<tr><td>Festive discount</td><td>New <code>IPricingPolicy</code> + one DI line</td></tr>
+<tr><td>Real login</td><td>Swap <code>ICurrentCustomerAccessor</code> for a JWT-claims accessor</td></tr>
+</table></div></section>
+</main></div>
+
+<!-- Renders the diagrams when opened locally (needs internet). -->
+<script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";mermaid.initialize({startOnLoad:true,theme:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"default"});</script>
+</body>
+</html>
