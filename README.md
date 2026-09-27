@@ -14,6 +14,67 @@ It is built as a senior-level reference solution: Clean Architecture, SOLID, saf
 
 ---
 
+## Screenshots
+
+Captured from the running app (React on `:5173`, API on `:5080`, seeded PostgreSQL).
+
+### 1. Product list with prices
+All 60 seeded products, paged, with franchise colours and INR prices.
+
+![Product list](docs/screenshots/01-product-list.png)
+
+### 2. Search by name
+`mumbai jersey` matches only products whose name, SKU, franchise or type contains **every** term.
+
+![Search](docs/screenshots/02-search.png)
+
+### 3. Filter by franchise and type, sort, in-stock only
+Chennai Super Kings + Jersey, sorted by price high to low, in-stock items only.
+
+![Filters and sort](docs/screenshots/03-filters-and-sort.png)
+
+### 4. Product details
+Description, attributes (sizes, material) and live stock.
+
+![Product details](docs/screenshots/04-product-details.png)
+
+### 5. Add to cart
+The cart count in the header updates straight away.
+
+![Added to cart](docs/screenshots/05-added-to-cart.png)
+
+### 6. Business-rule validation
+Asking for 50 units is rejected by the domain rule `Cart:MaxQuantityPerLine = 10` (configurable in `appsettings.json`).
+
+![Validation error](docs/screenshots/06-validation-error.png)
+
+### 7. Cart with price breakdown
+Quantity +/-, remove, subtotal, 18% GST and free shipping above ₹999. All come from the same `IPricingPolicy` that checkout uses.
+
+![Cart](docs/screenshots/07-cart.png)
+
+### 8. Checkout: order confirmation
+Idempotent checkout (`Idempotency-Key` header). Product data and prices are copied into the order at purchase time.
+
+![Order confirmation](docs/screenshots/08-order-confirmation.png)
+
+### 9. Order history
+Newest first, per customer.
+
+![Order history](docs/screenshots/09-order-history.png)
+
+### 10. Switching shopper
+Each customer has their own cart and orders (sent as the `X-Customer-Id` header).
+
+![Switch customer](docs/screenshots/10-switch-customer.png)
+
+### 11. REST API (Swagger)
+Versioned endpoints for catalogue, cart and orders, with `X-Customer-Id` and `Idempotency-Key` headers documented.
+
+![Swagger](docs/screenshots/11-swagger-api.png)
+
+---
+
 ## 1. Run it locally
 
 **Prerequisites:** .NET 8 SDK, Node 18+ and Docker Desktop. Docker is optional if you already have PostgreSQL.
