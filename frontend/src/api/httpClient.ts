@@ -5,7 +5,8 @@
  * transient HTTP statuses - but ONLY if repeating it cannot cause a duplicate side effect:
  *   - GET / PUT / DELETE are idempotent by definition;
  *   - POST is retried only when it carries an Idempotency-Key (the server de-duplicates).
- * "Add to cart" (POST without key) is therefore never retried automatically.
+ * Checkout and "add to cart" both send a key, so both are retried safely; a POST without a
+ * key is never retried automatically.
  */
 
 export interface RetryPolicy {

@@ -88,7 +88,7 @@ More: [01-architecture.md](01-architecture.md), [02-uml-class-diagram.md](02-uml
 ### 4.2 Every HTTP request
 
 ```
-Browser (httpClient.ts)                      adds X-Customer-Id, Idempotency-Key (checkout only), retries safely
+Browser (httpClient.ts)                      adds X-Customer-Id, Idempotency-Key (checkout, add to cart), retries safely
   → RateLimiter                              100 req / 10 s per customer (429 otherwise)
   → Controller                               binds + validates the request DTO, reads customer id via ICurrentCustomerAccessor
   → Application service                      use case; opens a transaction via IUnitOfWork when writing
@@ -207,7 +207,7 @@ Why each step is there:
 |---|---|---|
 | Server | The **whole transaction** is re-run on transient Npgsql errors (connection drop, failover, serialization failure) with exponential backoff. `ChangeTracker.Clear()` makes every attempt start clean | `Infrastructure/Persistence/EfUnitOfWork.cs`, `Resilience` options |
 | Server, commit ambiguity | If the connection drops **during** commit, the retry re-runs checkout and the idempotency key finds the committed order instead of creating a second one | same + idempotency |
-| Browser | GET/PUT/DELETE, and POST **only if it carries an `Idempotency-Key`**, with full-jitter backoff that honours `Retry-After`. "Add to cart" POST is never auto-retried | `frontend/src/api/httpClient.ts`, `config.ts` |
+| Browser | GET/PUT/DELETE, and POST **only if it carries an `Idempotency-Key`**, with full-jitter backoff that honours `Retry-After`. Checkout and "add to cart" both send a key, so both are retried safely | `frontend/src/api/httpClient.ts`, `config.ts` |
 | Browser, checkout key | `CartPage` creates the key once per checkout attempt (`checkoutKey.current ??= crypto.randomUUID()`) and reuses it for retries and double-clicks | `pages/CartPage.tsx` |
 
 More: [04-concurrency-idempotency-retry.md](04-concurrency-idempotency-retry.md), [ADR-0004](adr/0004-concurrency-strategy.md), [ADR-0005](adr/0005-idempotent-checkout.md).

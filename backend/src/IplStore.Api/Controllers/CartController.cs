@@ -26,14 +26,21 @@ public sealed class CartController : ControllerBase
     public Task<CartDto> Get(CancellationToken cancellationToken) =>
         _carts.GetAsync(_currentCustomer.GetRequiredCustomerId(), cancellationToken);
 
-    /// <summary>Adds units of a product. Adding a product already in the cart increases its quantity.</summary>
+    /// <summary>
+    /// Adds units of a product. Adding a product already in the cart increases its quantity.
+    /// Send a fresh UUID in <c>Idempotency-Key</c> per click and REUSE it when retrying: a repeat
+    /// with the same key returns the cart without adding again.
+    /// </summary>
     [HttpPost("items")]
     [ProducesResponseType<CartDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
-    public Task<CartDto> AddItem([FromBody] AddCartItemRequest request, CancellationToken cancellationToken) =>
+    public Task<CartDto> AddItem(
+        [FromBody] AddCartItemRequest request,
+        [FromHeader(Name = OrdersController.IdempotencyKeyHeader)] string? idempotencyKey,
+        CancellationToken cancellationToken) =>
         _carts.AddItemAsync(
-            new AddCartItemCommand(_currentCustomer.GetRequiredCustomerId(), request.ProductId, request.Quantity),
+            new AddCartItemCommand(_currentCustomer.GetRequiredCustomerId(), request.ProductId, request.Quantity, idempotencyKey),
             cancellationToken);
 
     /// <summary>Sets the quantity of a line (0 removes it). PUT is idempotent: safe to retry.</summary>

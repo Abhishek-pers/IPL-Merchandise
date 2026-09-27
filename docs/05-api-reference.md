@@ -7,7 +7,7 @@ Base URL: `http://localhost:5080/api/v1`. Interactive docs: **`/swagger`**. Read
 | Header | Where | Meaning |
 |---|---|---|
 | `X-Customer-Id: <uuid>` | cart and orders endpoints | Caller identity (demo stand-in for a JWT). Missing or invalid returns `401` |
-| `Idempotency-Key: <string ≤100>` | `POST /orders` | Makes checkout safe to retry. See docs/04 |
+| `Idempotency-Key: <string ≤100>` | `POST /orders` (required), `POST /cart/items` (optional, the SPA always sends it) | Makes checkout and add-to-cart safe to retry. See docs/04 |
 | `Idempotent-Replayed: true` | response of a replayed checkout | The original order is being returned |
 
 ## Endpoints
@@ -20,7 +20,7 @@ Base URL: `http://localhost:5080/api/v1`. Interactive docs: **`/swagger`**. Read
 | GET | `/categories` | – | 200 `Category[]` (cached 5 min) | – |
 | GET | `/customers` | – | 200 demo customers | – |
 | GET | `/cart` | – | 200 `Cart` (empty cart if none) | 401 |
-| POST | `/cart/items` | `{ productId, quantity }` (adds and merges) | 200 `Cart` | 404, 422 `cart.quantity_limit_exceeded`, `cart.line_limit_reached`, `product.insufficient_stock` |
+| POST | `/cart/items` | `{ productId, quantity }` (adds and merges) + optional `Idempotency-Key` (a repeat adds nothing) | 200 `Cart` | 404, 422 `cart.quantity_limit_exceeded`, `cart.line_limit_reached`, `product.insufficient_stock` |
 | PUT | `/cart/items/{productId}` | `{ quantity }` (absolute, 0 removes) | 200 `Cart` | 422 `cart.item_not_found` |
 | DELETE | `/cart/items/{productId}` | – | 200 `Cart` | 422 `cart.item_not_found` |
 | POST | `/orders` | – (uses the cart) + `Idempotency-Key` | 201 `OrderDetails` / 200 replay | 400, 422 `cart.empty`, `product.insufficient_stock`, `product.unavailable`, 409 |

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/httpClient';
 import { storeApi } from '../api/storeApi';
@@ -15,13 +15,21 @@ export function ProductDetailsPage() {
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<Error>();
   const [busy, setBusy] = useState(false);
+  // One key per "add" intent. Kept after a failure, so clicking again after a network error
+  // repeats the SAME request (the server adds at most once). Cleared on success.
+  const pendingAdd = useRef<{ productId: string; quantity: number; key: string }>();
 
   async function addToCart() {
     setBusy(true);
     setMessage(undefined);
     setError(undefined);
+    const current = pendingAdd.current;
+    if (!current || current.productId !== productId || current.quantity !== quantity) {
+      pendingAdd.current = { productId, quantity, key: crypto.randomUUID() };
+    }
     try {
-      const cart = await storeApi.addToCart(productId, quantity);
+      const cart = await storeApi.addToCart(productId, quantity, pendingAdd.current!.key);
+      pendingAdd.current = undefined;
       updateCart(cart);
       setMessage(`Added ${quantity} to your cart.`);
     } catch (e) {

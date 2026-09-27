@@ -24,8 +24,9 @@ export function createStoreApi(http: HttpClient) {
     listCustomers: () => http.get<Customer[]>('/customers'),
 
     getCart: () => http.get<Cart>('/cart'),
-    addToCart: (productId: string, quantity: number) =>
-      http.post<Cart>('/cart/items', { productId, quantity }).then((r) => r.data),
+    /** Idempotent add: one key per click, reused when retrying, so a lost response never adds twice. */
+    addToCart: (productId: string, quantity: number, idempotencyKey: string) =>
+      http.post<Cart>('/cart/items', { productId, quantity }, idempotencyKey).then((r) => r.data),
     setCartQuantity: (productId: string, quantity: number) =>
       http.put<Cart>(`/cart/items/${productId}`, { quantity }),
     removeFromCart: (productId: string) => http.delete<Cart>(`/cart/items/${productId}`),

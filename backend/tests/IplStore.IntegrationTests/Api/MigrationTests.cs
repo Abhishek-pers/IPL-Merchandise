@@ -16,7 +16,7 @@ public sealed class MigrationTests : ApiTestBase
         // The host already migrated once. Simulate 5 replicas starting simultaneously.
         await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => Factory.Services.MigrateDatabaseAsync()));
 
-        (await ScalarAsync<long>("SELECT count(*) FROM schema_migrations")).Should().Be(3);
+        (await ScalarAsync<long>("SELECT count(*) FROM schema_migrations")).Should().Be(4);
         (await ScalarAsync<long>("SELECT count(*) FROM products")).Should().Be(60, "seed scripts are idempotent");
         (await ScalarAsync<long>("SELECT count(*) FROM product_catalog")).Should().Be(60);
     }

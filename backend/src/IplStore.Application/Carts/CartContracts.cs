@@ -4,8 +4,12 @@ namespace IplStore.Application.Carts;
 
 // ---------------------------------------------------------------- commands (input)
 
-/// <summary>Add units of a product to the customer's cart (merges with an existing line).</summary>
-public sealed record AddCartItemCommand(Guid CustomerId, Guid ProductId, int Quantity);
+/// <summary>
+/// Add units of a product to the customer's cart (merges with an existing line).
+/// Adding INCREMENTS the quantity, so a retry must carry the same <paramref name="IdempotencyKey"/>:
+/// a repeat with a key that was already applied changes nothing. Null = no de-duplication.
+/// </summary>
+public sealed record AddCartItemCommand(Guid CustomerId, Guid ProductId, int Quantity, string? IdempotencyKey = null);
 
 /// <summary>Set the absolute quantity of a line; 0 removes it.</summary>
 public sealed record UpdateCartItemCommand(Guid CustomerId, Guid ProductId, int Quantity);

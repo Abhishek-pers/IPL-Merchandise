@@ -23,6 +23,44 @@ public sealed class CartServiceTests
     }
 
     [Fact]
+    public async Task Retrying_an_add_with_the_same_idempotency_key_adds_only_once()
+    {
+        var product = TestData.Product(stock: 10);
+        _f.Store.AddProduct(product);
+        var command = new AddCartItemCommand(_f.Customer.Id, product.Id, 1, "click-1");
+
+        await _f.CartService.AddItemAsync(command, default);
+        var cart = await _f.CartService.AddItemAsync(command, default); // lost response -> client retries
+
+        cart.Lines.Should().ContainSingle().Which.Quantity.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_new_idempotency_key_is_a_new_add()
+    {
+        var product = TestData.Product(stock: 10);
+        _f.Store.AddProduct(product);
+
+        await _f.CartService.AddItemAsync(new AddCartItemCommand(_f.Customer.Id, product.Id, 1, "click-1"), default);
+        var cart = await _f.CartService.AddItemAsync(new AddCartItemCommand(_f.Customer.Id, product.Id, 1, "click-2"), default);
+
+        cart.Lines.Should().ContainSingle().Which.Quantity.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_rejected_add_does_not_use_up_its_idempotency_key()
+    {
+        var product = TestData.Product(stock: 2);
+        _f.Store.AddProduct(product);
+
+        var tooMany = () => _f.CartService.AddItemAsync(new AddCartItemCommand(_f.Customer.Id, product.Id, 3, "click-1"), default);
+        await tooMany.Should().ThrowAsync<DomainException>();
+        var cart = await _f.CartService.AddItemAsync(new AddCartItemCommand(_f.Customer.Id, product.Id, 1, "click-1"), default);
+
+        cart.Lines.Should().ContainSingle().Which.Quantity.Should().Be(1, "the key is recorded in the rolled-back transaction");
+    }
+
+    [Fact]
     public async Task Adding_more_than_is_in_stock_is_rejected_and_nothing_is_persisted()
     {
         var product = TestData.Product(stock: 2);

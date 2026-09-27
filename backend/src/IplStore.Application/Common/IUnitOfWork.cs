@@ -5,10 +5,10 @@ namespace IplStore.Application.Common;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The implementation wraps <paramref name="work"/> in a database transaction AND in the
+/// The implementation wraps <c>work</c> in a database transaction AND in the
 /// retry policy configured by <c>ResilienceOptions</c>. On a transient failure (dropped
 /// connection, deadlock, serialization failure) the WHOLE delegate is re-executed with a
-/// fresh change tracker, so <paramref name="work"/> must be re-runnable: read state inside
+/// fresh change tracker, so <c>work</c> must be re-runnable: read state inside
 /// the delegate, never capture tracked entities from outside it.
 /// </para>
 /// <para>

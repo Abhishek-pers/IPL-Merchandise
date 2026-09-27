@@ -126,6 +126,7 @@ Column-by-column detail, trigger flow and sample rows: [11 Denormalised table st
 | `uq_carts_customer` | 1 cart per customer | Two first-ever "add to cart" calls at once |
 | `uq_cart_items_cart_product` | 1 line per product per cart | Two "add same product" calls at once |
 | `uq_orders_customer_idempotency` | 1 order per checkout attempt | Double click, client retry after a timeout |
+| `pk_idempotency_keys` (`customer_id, operation, idempotency_key`) | 1 application of an "add to cart" click | Client retry after a lost response, server transaction retry after an ambiguous commit |
 | `ck_products_stock_non_negative` | Stock never below 0 | Any buggy writer. This is the last line of defence |
 | `ck_orders_total`, `ck_order_items_line_total` | Money adds up | Arithmetic bugs |
 | `uq_products_sku`, `uq_orders_order_number`, `uq_customers_email` (case-insensitive) | Natural keys unique | Duplicate data entry |

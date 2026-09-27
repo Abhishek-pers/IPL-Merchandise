@@ -30,6 +30,11 @@ public sealed class InMemoryStore
 
     internal List<Cart> TrackedCarts { get; } = new();
 
+    /// <summary>Committed idempotency keys ("customer|operation|key").</summary>
+    public HashSet<string> IdempotencyKeys { get; } = new();
+
+    internal HashSet<string> PendingIdempotencyKeys { get; } = new();
+
     public void AddCustomer(Customer customer) => Customers[customer.Id] = customer;
 
     public void AddProduct(Product product)
@@ -77,6 +82,7 @@ public sealed class InMemoryStore
         }
 
         Orders.AddRange(PendingOrders);
+        IdempotencyKeys.UnionWith(PendingIdempotencyKeys);
         Discard();
     }
 
@@ -95,5 +101,6 @@ public sealed class InMemoryStore
     {
         PendingOrders.Clear();
         TrackedCarts.Clear();
+        PendingIdempotencyKeys.Clear();
     }
 }

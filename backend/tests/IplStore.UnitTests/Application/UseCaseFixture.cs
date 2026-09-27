@@ -22,7 +22,7 @@ public sealed class UseCaseFixture
         var customers = new FakeCustomerRepository(Store);
 
         CartService = new CartService(
-            UnitOfWork, carts, new FakeCartQueries(Store), products, customers, pricing, CartOptions, Time);
+            UnitOfWork, carts, new FakeCartQueries(Store), products, customers, pricing, new FakeIdempotencyStore(Store), CartOptions, Time);
 
         CheckoutService = new CheckoutService(
             UnitOfWork,

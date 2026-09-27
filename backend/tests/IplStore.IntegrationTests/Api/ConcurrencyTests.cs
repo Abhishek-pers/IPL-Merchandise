@@ -53,6 +53,20 @@ public sealed class ConcurrencyTests : ApiTestBase
     }
 
     [Fact]
+    public async Task Same_idempotency_key_on_add_to_cart_sent_concurrently_adds_exactly_once()
+    {
+        var customer = await CreateCustomerAsync();
+        var product = await ProductIdAsync("KKR-FLG");
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
+            Client.SendAsync(Request(HttpMethod.Post, "/api/v1/cart/items", customer, new { productId = product, quantity = 1 }, idempotencyKey: "add-click-key"))));
+
+        responses.Should().OnlyContain(r => r.StatusCode == HttpStatusCode.OK, "a repeat returns the cart, not an error");
+        (await ScalarAsync<int>($"SELECT quantity FROM cart_items WHERE customer_id = '{customer}'")).Should().Be(1);
+        (await ScalarAsync<long>($"SELECT count(*) FROM idempotency_keys WHERE customer_id = '{customer}'")).Should().Be(1);
+    }
+
+    [Fact]
     public async Task Concurrent_checkouts_never_oversell_limited_stock()
     {
         const int stock = 3;

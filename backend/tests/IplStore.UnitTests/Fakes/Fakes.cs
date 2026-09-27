@@ -96,6 +96,23 @@ public sealed class FakeCartRepository : ICartRepository
     }
 }
 
+/// <summary>Keys become visible on commit and vanish on rollback, like the real table.</summary>
+public sealed class FakeIdempotencyStore : IIdempotencyStore
+{
+    private readonly InMemoryStore _store;
+
+    public FakeIdempotencyStore(InMemoryStore store)
+    {
+        _store = store;
+    }
+
+    public Task<bool> TryRecordAsync(Guid customerId, string operation, string idempotencyKey, CancellationToken cancellationToken)
+    {
+        var id = $"{customerId}|{operation}|{idempotencyKey}";
+        return Task.FromResult(!_store.IdempotencyKeys.Contains(id) && _store.PendingIdempotencyKeys.Add(id));
+    }
+}
+
 public sealed class FakeCartQueries : ICartQueries
 {
     private readonly InMemoryStore _store;

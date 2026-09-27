@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddDbContext<ReadOnlyStoreDbContext>((sp, builder) => ConfigureNpgsql(sp, builder, useReadReplica: true));
 
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        services.AddScoped<IIdempotencyStore, IdempotencyStore>();
 
         // Write side (primary).
         services.AddScoped<ICartRepository, CartRepository>();

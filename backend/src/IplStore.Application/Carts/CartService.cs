@@ -29,6 +29,7 @@ public sealed class CartService : ICartService
     private readonly IProductRepository _products;
     private readonly ICustomerRepository _customers;
     private readonly IPricingPolicy _pricing;
+    private readonly IIdempotencyStore _idempotency;
     private readonly IOptionsMonitor<CartOptions> _options;
     private readonly TimeProvider _time;
 
@@ -39,6 +40,7 @@ public sealed class CartService : ICartService
         IProductRepository products,
         ICustomerRepository customers,
         IPricingPolicy pricing,
+        IIdempotencyStore idempotency,
         IOptionsMonitor<CartOptions> options,
         TimeProvider time)
     {
@@ -48,6 +50,7 @@ public sealed class CartService : ICartService
         _products = products;
         _customers = customers;
         _pricing = pricing;
+        _idempotency = idempotency;
         _options = options;
         _time = time;
     }
@@ -66,10 +69,21 @@ public sealed class CartService : ICartService
             throw new RequestValidationException(nameof(command.Quantity), "Quantity must be greater than zero.");
         }
 
+        var idempotencyKey = NormaliseIdempotencyKey(command.IdempotencyKey);
+
         await _unitOfWork.ExecuteInTransactionAsync(
             async ct =>
             {
                 await EnsureCustomerExistsAsync(command.CustomerId, ct);
+
+                // Lock first, then check the key: a concurrent duplicate waits here and then sees the key.
+                var cart = await _carts.GetOrCreateForUpdateAsync(command.CustomerId, ct);
+                if (idempotencyKey is not null &&
+                    !await _idempotency.TryRecordAsync(command.CustomerId, IdempotentOperations.AddCartItem, idempotencyKey, ct))
+                {
+                    return; // Already applied: a retry of a request that succeeded. Return the cart unchanged.
+                }
+
                 var product = await _products.FindAsync(command.ProductId, ct);
                 if (product is null || !product.IsActive)
                 {
@@ -77,7 +91,6 @@ public sealed class CartService : ICartService
                 }
 
                 var options = _options.CurrentValue;
-                var cart = await _carts.GetOrCreateForUpdateAsync(command.CustomerId, ct);
                 var line = cart.AddItem(product.Id, command.Quantity, options.ToPolicy(), _time.GetUtcNow());
 
                 if (options.ValidateStockOnAdd && !product.CanFulfil(line.Quantity))
@@ -140,6 +153,24 @@ public sealed class CartService : ICartService
             cancellationToken);
 
         return await GetAsync(command.CustomerId, cancellationToken);
+    }
+
+    private static string? NormaliseIdempotencyKey(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return null;
+        }
+
+        var trimmed = key.Trim();
+        if (trimmed.Length > IIdempotencyStore.MaxKeyLength)
+        {
+            throw new RequestValidationException(
+                "Idempotency-Key",
+                $"The Idempotency-Key must be at most {IIdempotencyStore.MaxKeyLength} characters.");
+        }
+
+        return trimmed;
     }
 
     private async Task EnsureCustomerExistsAsync(Guid customerId, CancellationToken cancellationToken)
