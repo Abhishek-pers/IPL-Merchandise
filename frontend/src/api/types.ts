@@ -16,6 +16,7 @@ export interface ProductSummary {
   price: number;
   currency: string;
   inStock: boolean;
+  stockQuantity: number;
   franchiseCode: string;
   franchiseName: string;
   franchiseColor: string;

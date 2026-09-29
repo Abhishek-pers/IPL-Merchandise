@@ -2,6 +2,7 @@
 // dropped database connection. Proves exactly-once effects under at-least-once delivery.
 //
 //   node scripts/simulate-failures.mjs        (API on http://localhost:5080, frontend deps installed)
+//   node scripts/simulate-failures.mjs --scenario=checkout-response-lost (focused retry demo)
 //
 // How network errors are simulated: a small proxy sits between the client and the API and
 //   - "refuse"        -> kills the connection BEFORE the request reaches the API (nothing happened), or
@@ -272,19 +273,38 @@ async function s7_databaseConnectionKilled(product) {
 
 // ------------------------------------------------------------------ run
 
+const scenarioNames = [
+  'parallel-add',
+  'different-key-checkouts',
+  'same-key-checkouts',
+  'checkout-response-lost',
+  'checkout-request-lost',
+  'add-response-lost',
+  'database-connection-killed',
+];
+const scenarioArgument = process.argv.find((arg) => arg.startsWith('--scenario='));
+const requestedScenario = scenarioArgument?.split('=')[1] ?? 'all';
+if (requestedScenario !== 'all' && !scenarioNames.includes(requestedScenario)) {
+  console.error(`Unknown scenario '${requestedScenario}'. Choose one of: ${scenarioNames.join(', ')}.`);
+  process.exit(2);
+}
+const selectedScenarios = new Set(requestedScenario === 'all' ? scenarioNames : [requestedScenario]);
+
 await new Promise((r) => proxy.listen(PROXY_PORT, r));
 try {
-  const mod = await loadFrontendClient();
+  const needsFrontend = ['checkout-response-lost', 'checkout-request-lost', 'add-response-lost']
+    .some((name) => selectedScenarios.has(name));
+  const mod = needsFrontend ? await loadFrontendClient() : null;
   const product = await pickProduct(process.env.SKU ?? 'MI-CAP');
   console.log(`Using "${product.name}" (${product.sku}); fault proxy on :${PROXY_PORT} -> ${API_ORIGIN}`);
 
-  await s1_parallelAdds(product);
-  await s2_doubleClickDifferentKeys(product);
-  await s3_sameKeyParallel(product);
-  await s4_checkoutResponseLost(mod, product);
-  await s5_checkoutRequestLost(mod, product);
-  await s6_addToCartResponseLost(mod, product);
-  await s7_databaseConnectionKilled(product);
+  if (selectedScenarios.has('parallel-add')) await s1_parallelAdds(product);
+  if (selectedScenarios.has('different-key-checkouts')) await s2_doubleClickDifferentKeys(product);
+  if (selectedScenarios.has('same-key-checkouts')) await s3_sameKeyParallel(product);
+  if (selectedScenarios.has('checkout-response-lost')) await s4_checkoutResponseLost(mod, product);
+  if (selectedScenarios.has('checkout-request-lost')) await s5_checkoutRequestLost(mod, product);
+  if (selectedScenarios.has('add-response-lost')) await s6_addToCartResponseLost(mod, product);
+  if (selectedScenarios.has('database-connection-killed')) await s7_databaseConnectionKilled(product);
   await emptyCart();
 } finally {
   proxy.close();

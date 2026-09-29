@@ -33,12 +33,20 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
 .filters input[type='search'] { flex: 1; min-width: 200px; }
 .checkbox { display: flex; gap: 0.3rem; align-items: center; }
 
+.team-shortcuts { display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.25rem 0 0.75rem; margin-bottom: 0.5rem; }
+.team-shortcut { display: inline-flex; align-items: center; gap: 0.45rem; flex: 0 0 auto; padding: 0.45rem 0.7rem; color: var(--text); }
+.team-shortcut.active { border-color: var(--accent); background: #eff6ff; }
+.team-swatch { width: 0.75rem; height: 0.75rem; border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 50%; }
+
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
 .card { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; color: var(--text); }
 .card:hover { text-decoration: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
 .card-body { padding: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; flex: 1; }
 .card-title { font-weight: 600; }
 .card-footer { margin-top: auto; display: flex; justify-content: space-between; align-items: center; }
+.stock-label { font-size: 0.75rem; font-weight: 600; }
+.stock-label.low-stock, .stock-label.sold-out { color: var(--danger); }
+.stock-label.in-stock { color: var(--ok); }
 
 .tile { height: 120px; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
 .details .tile { height: 260px; border-radius: 8px; }

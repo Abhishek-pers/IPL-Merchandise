@@ -10,6 +10,7 @@ public sealed record ProductSummaryDto(
     decimal Price,
     string Currency,
     bool InStock,
+    int StockQuantity,
     string FranchiseCode,
     string FranchiseName,
     string FranchiseColor,

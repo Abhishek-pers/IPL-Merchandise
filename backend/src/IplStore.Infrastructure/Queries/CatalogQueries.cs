@@ -46,6 +46,7 @@ internal sealed class CatalogQueries : ICatalogQueries
                 c.Price,
                 c.Currency,
                 c.StockQuantity > 0,
+                c.StockQuantity,
                 c.FranchiseCode,
                 c.FranchiseName,
                 c.FranchiseColor,

@@ -41,6 +41,32 @@ export function ProductListPage() {
     <section>
       <h1>Official IPL merchandise</h1>
 
+      <nav className="team-shortcuts" aria-label="Browse by franchise">
+        <button
+          type="button"
+          className={!search.franchise?.length ? 'team-shortcut active' : 'team-shortcut'}
+          aria-pressed={!search.franchise?.length}
+          onClick={() => update('franchise', undefined)}
+        >
+          All teams
+        </button>
+        {franchises.data?.map((franchise) => {
+          const selected = search.franchise?.includes(franchise.code) ?? false;
+          return (
+            <button
+              key={franchise.id}
+              type="button"
+              className={selected ? 'team-shortcut active' : 'team-shortcut'}
+              aria-pressed={selected}
+              onClick={() => update('franchise', selected ? undefined : franchise.code)}
+            >
+              <span className="team-swatch" style={{ backgroundColor: franchise.primaryColor }} aria-hidden="true" />
+              {franchise.name}
+            </button>
+          );
+        })}
+      </nav>
+
       <form
         className="filters"
         onSubmit={(e) => {

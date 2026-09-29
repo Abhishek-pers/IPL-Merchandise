@@ -1,6 +1,7 @@
 // Live proof of the concurrency guarantees against a RUNNING API (no Docker needed).
 //
 //   node scripts/demo-concurrency.mjs            (API must be up on http://localhost:5080)
+//   node scripts/demo-concurrency.mjs --idempotency-only (run only the checkout demo)
 //   API_URL=http://host:port node scripts/demo-concurrency.mjs
 //
 // Demo 1 - exactly-once checkout: 5 parallel POST /orders with the SAME Idempotency-Key
@@ -34,6 +35,11 @@ async function addToCart(customerId, productId, quantity) {
   if (res.status !== 200) throw new Error(`Add to cart failed (${res.status}): ${res.data?.detail}`);
 }
 
+async function orderCount(customerId) {
+  const { data } = await call('GET', '/orders?pageSize=1', customerId);
+  return data.totalCount;
+}
+
 async function findProduct(predicate) {
   const all = [];
   for (let page = 1; ; page++) {
@@ -52,9 +58,13 @@ async function demoIdempotency() {
   console.log('\n=== Demo 1: exactly-once checkout (same Idempotency-Key sent 5x in parallel) ===');
   await emptyCart(AARAV);
   const product = await findProduct((p) => p.stockQuantity >= 1);
+  const ordersBefore = await orderCount(AARAV);
+  const stockBefore = product.stockQuantity;
   await addToCart(AARAV, product.id, 1);
 
   const key = crypto.randomUUID();
+  console.log(`  shopper: Aarav  product: ${product.sku}  stock before: ${stockBefore}`);
+  console.log(`  orders before: ${ordersBefore}  idempotency key: ${key}`);
   const results = await Promise.all(
     Array.from({ length: 5 }, () => call('POST', '/orders', AARAV, { idempotencyKey: key })));
 
@@ -63,7 +73,17 @@ async function demoIdempotency() {
   const created = results.filter((r) => r.status === 201).length;
   const orderNumbers = new Set(results.map((r) => r.data?.orderNumber));
   console.log(`  -> ${created} created, ${results.length - created} replayed, ${orderNumbers.size} distinct order(s)`);
-  return created === 1 && orderNumbers.size === 1;
+  const [{ data: productAfter }, ordersAfter] = await Promise.all([
+    call('GET', `/products/${product.id}`, null),
+    orderCount(AARAV),
+  ]);
+  console.log(`  DB-backed state: orders ${ordersBefore} -> ${ordersAfter}; ${product.sku} stock ${stockBefore} -> ${productAfter.stockQuantity}`);
+  console.log('  Verify the persisted rows in psql:');
+  console.log(`    SELECT order_number, status, idempotency_key FROM orders WHERE customer_id = '${AARAV}' AND idempotency_key = '${key}';`);
+  console.log(`    SELECT sku, stock_quantity FROM products WHERE id = '${product.id}';`);
+  return created === 1 && orderNumbers.size === 1
+    && ordersAfter === ordersBefore + 1
+    && productAfter.stockQuantity === stockBefore - 1;
 }
 
 async function demoNoOversell() {
@@ -100,6 +120,7 @@ async function demoNoOversell() {
 }
 
 const ok1 = await demoIdempotency();
-const ok2 = await demoNoOversell();
-console.log(`\nResult: idempotency ${ok1 ? 'PASS' : 'FAIL'}, no-oversell ${ok2 ? 'PASS' : 'FAIL'}`);
+const idempotencyOnly = process.argv.includes('--idempotency-only');
+const ok2 = idempotencyOnly ? true : await demoNoOversell();
+console.log(`\nResult: idempotency ${ok1 ? 'PASS' : 'FAIL'}${idempotencyOnly ? '' : `, no-oversell ${ok2 ? 'PASS' : 'FAIL'}`}`);
 process.exit(ok1 && ok2 ? 0 : 1);

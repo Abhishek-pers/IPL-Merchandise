@@ -78,7 +78,13 @@ export function ProductCard({ product }: { product: ProductSummary }) {
         <div className="muted small">{product.franchiseName}</div>
         <div className="card-footer">
           <Money amount={product.price} currency={product.currency} />
-          {!product.inStock && <span className="badge">Sold out</span>}
+          {product.stockQuantity === 0 ? (
+            <span className="stock-label sold-out">Sold out</span>
+          ) : product.stockQuantity < 15 ? (
+            <span className="stock-label low-stock">Only {product.stockQuantity} left</span>
+          ) : (
+            <span className="stock-label in-stock">In stock</span>
+          )}
         </div>
       </div>
     </Link>

@@ -18,7 +18,8 @@ public sealed class CatalogApiTests : ApiTestBase
         var page = await ReadAsync<PagedResult<ProductSummaryDto>>(await Client.GetAsync("/api/v1/products?pageSize=5"));
 
         page.TotalCount.Should().Be(60);
-        page.Items.Should().HaveCount(5).And.OnlyContain(p => p.Price > 0 && p.Currency == "INR");
+        page.Items.Should().HaveCount(5).And.OnlyContain(p =>
+            p.Price > 0 && p.Currency == "INR" && p.StockQuantity >= 0 && p.InStock == (p.StockQuantity > 0));
         page.HasNextPage.Should().BeTrue();
     }
 
