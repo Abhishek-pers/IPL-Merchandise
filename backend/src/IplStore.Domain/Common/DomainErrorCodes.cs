@@ -19,4 +19,8 @@ public static class DomainErrorCodes
     public const string OrderHasNoLines = "order.no_lines";
     public const string OrderDuplicateLines = "order.duplicate_lines";
     public const string OrderPricingMismatch = "order.pricing_mismatch";
+    public const string OrderNotPayable = "order.not_payable";
+    public const string OrderNotCancellable = "order.not_cancellable";
+
+    public const string PaymentDeclined = "payment.declined";
 }

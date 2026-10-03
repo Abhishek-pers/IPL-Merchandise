@@ -9,6 +9,9 @@ namespace IplStore.Application.Orders;
 /// </summary>
 public sealed record PlaceOrderCommand(Guid CustomerId, string? IdempotencyKey);
 
+/// <summary>Pay for a placed order. <see cref="SimulateFailure"/> drives the dummy gateway's outcome.</summary>
+public sealed record PayOrderCommand(Guid CustomerId, Guid OrderId, bool SimulateFailure);
+
 public sealed record PriceSummaryDto(decimal Subtotal, decimal Tax, decimal Shipping, decimal Total, string Currency)
 {
     public static PriceSummaryDto From(PriceBreakdown price)

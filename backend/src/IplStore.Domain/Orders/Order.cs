@@ -105,4 +105,40 @@ public sealed class Order
 
         return order;
     }
+
+    /// <summary>Placed -> Paid. Idempotent: marking an already-paid order again is a no-op.</summary>
+    public void MarkPaid()
+    {
+        if (Status == OrderStatus.Paid)
+        {
+            return;
+        }
+
+        if (Status != OrderStatus.Placed)
+        {
+            throw new DomainException(DomainErrorCodes.OrderNotPayable, $"Order {OrderNumber} is {Status} and cannot be paid.");
+        }
+
+        Status = OrderStatus.Paid;
+    }
+
+    /// <summary>
+    /// Placed -> Cancelled. Returns false when the order was already cancelled (idempotent),
+    /// so the caller releases the reserved stock exactly once.
+    /// </summary>
+    public bool Cancel()
+    {
+        if (Status == OrderStatus.Cancelled)
+        {
+            return false;
+        }
+
+        if (Status != OrderStatus.Placed)
+        {
+            throw new DomainException(DomainErrorCodes.OrderNotCancellable, $"Order {OrderNumber} is {Status} and cannot be cancelled.");
+        }
+
+        Status = OrderStatus.Cancelled;
+        return true;
+    }
 }

@@ -18,12 +18,18 @@ public sealed class OrdersController : ControllerBase
 
     private readonly ICheckoutService _checkout;
     private readonly IOrderService _orders;
+    private readonly IPaymentService _payments;
     private readonly ICurrentCustomerAccessor _currentCustomer;
 
-    public OrdersController(ICheckoutService checkout, IOrderService orders, ICurrentCustomerAccessor currentCustomer)
+    public OrdersController(
+        ICheckoutService checkout,
+        IOrderService orders,
+        IPaymentService payments,
+        ICurrentCustomerAccessor currentCustomer)
     {
         _checkout = checkout;
         _orders = orders;
+        _payments = payments;
         _currentCustomer = currentCustomer;
     }
 
@@ -66,4 +72,26 @@ public sealed class OrdersController : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public Task<OrderDetailsDto> Get(Guid orderId, CancellationToken cancellationToken) =>
         _orders.GetAsync(_currentCustomer.GetRequiredCustomerId(), orderId, cancellationToken);
+
+    /// <summary>
+    /// Pays for a placed order through the dummy gateway. <c>simulateFailure: true</c> forces a
+    /// decline (422 <c>payment.declined</c>); the order then stays Placed and can be retried.
+    /// Paying an already-paid order returns it unchanged (no second charge).
+    /// </summary>
+    [HttpPost("{orderId:guid}/payment")]
+    [ProducesResponseType<OrderDetailsDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
+    public Task<OrderDetailsDto> Pay(Guid orderId, [FromBody] PayOrderRequest? request, CancellationToken cancellationToken) =>
+        _payments.PayAsync(
+            new PayOrderCommand(_currentCustomer.GetRequiredCustomerId(), orderId, request?.SimulateFailure ?? false),
+            cancellationToken);
+
+    /// <summary>Cancels an unpaid order and releases its reserved stock. Repeating it is a no-op.</summary>
+    [HttpPost("{orderId:guid}/cancel")]
+    [ProducesResponseType<OrderDetailsDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
+    public Task<OrderDetailsDto> Cancel(Guid orderId, CancellationToken cancellationToken) =>
+        _payments.CancelAsync(_currentCustomer.GetRequiredCustomerId(), orderId, cancellationToken);
 }

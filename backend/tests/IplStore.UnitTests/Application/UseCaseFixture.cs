@@ -38,6 +38,14 @@ public sealed class UseCaseFixture
             NullLogger<CheckoutService>.Instance);
 
         OrderService = new OrderService(new FakeOrderQueries(Store), new TestOptionsMonitor<PagingOptions>(new PagingOptions()));
+
+        PaymentService = new PaymentService(
+            UnitOfWork,
+            new FakeOrderRepository(Store),
+            new FakeOrderQueries(Store),
+            products,
+            PaymentGateway,
+            NullLogger<PaymentService>.Instance);
     }
 
     public InMemoryStore Store { get; } = new();
@@ -65,6 +73,10 @@ public sealed class UseCaseFixture
     public CheckoutService CheckoutService { get; }
 
     public OrderService OrderService { get; }
+
+    public FakePaymentGateway PaymentGateway { get; } = new();
+
+    public PaymentService PaymentService { get; }
 
     private FakeUnitOfWork? _unitOfWork;
 }

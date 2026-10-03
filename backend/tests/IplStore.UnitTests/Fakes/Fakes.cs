@@ -156,6 +156,12 @@ public sealed class FakeProductRepository : IProductRepository
 
     public Task<bool> TryReserveStockAsync(Guid productId, int quantity, CancellationToken cancellationToken) =>
         Task.FromResult(_store.TryReserve(productId, quantity));
+
+    public Task ReleaseStockAsync(Guid productId, int quantity, CancellationToken cancellationToken)
+    {
+        _store.Release(productId, quantity);
+        return Task.CompletedTask;
+    }
 }
 
 public sealed class FakeOrderRepository : IOrderRepository
@@ -171,6 +177,23 @@ public sealed class FakeOrderRepository : IOrderRepository
         Task.FromResult(_store.Orders.FirstOrDefault(o => o.CustomerId == customerId && o.IdempotencyKey == idempotencyKey));
 
     public void Add(Order order) => _store.PendingOrders.Add(order);
+
+    public Task<Order?> FindForUpdateAsync(Guid customerId, Guid orderId, CancellationToken cancellationToken) =>
+        Task.FromResult(_store.Orders.FirstOrDefault(o => o.Id == orderId && o.CustomerId == customerId));
+}
+
+/// <summary>Scriptable gateway: approves unless the request simulates a failure, and records every call.</summary>
+public sealed class FakePaymentGateway : IPaymentGateway
+{
+    public List<PaymentRequest> Charges { get; } = new();
+
+    public Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken cancellationToken)
+    {
+        Charges.Add(request);
+        return Task.FromResult(request.SimulateFailure
+            ? PaymentResult.Declined("Card declined (test).")
+            : PaymentResult.Success($"TXN-{Charges.Count}"));
+    }
 }
 
 public sealed class FakeOrderQueries : IOrderQueries

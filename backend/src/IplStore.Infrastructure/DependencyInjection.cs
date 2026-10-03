@@ -5,6 +5,7 @@ using IplStore.Application.Customers;
 using IplStore.Application.Orders;
 using IplStore.Infrastructure.Options;
 using IplStore.Infrastructure.Orders;
+using IplStore.Infrastructure.Payments;
 using IplStore.Infrastructure.Persistence;
 using IplStore.Infrastructure.Persistence.Migrations;
 using IplStore.Infrastructure.Queries;
@@ -49,6 +50,9 @@ public static class DependencyInjection
         services.AddSingleton<ICatalogFilter, InStockFilter>();
 
         services.AddSingleton<IOrderNumberGenerator, OrderNumberGenerator>();
+
+        // Singleton: the dummy gateway remembers approved orders, like a provider's idempotency store.
+        services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
         services.AddSingleton<IDatabaseMigrator, SqlScriptDatabaseMigrator>();
 
         return services;

@@ -38,6 +38,11 @@ export function createStoreApi(http: HttpClient) {
     },
     listOrders: (page = 1) => http.get<PagedResult<OrderSummary>>('/orders', { page, pageSize: 10 }),
     getOrder: (id: string) => http.get<OrderDetails>(`/orders/${id}`),
+    /** Dummy payment: simulateFailure=true makes the gateway decline. Paying twice never charges twice. */
+    payOrder: (id: string, simulateFailure: boolean) =>
+      http.post<OrderDetails>(`/orders/${id}/payment`, { simulateFailure }).then((r) => r.data),
+    /** Cancels an unpaid order and releases its stock. */
+    cancelOrder: (id: string) => http.post<OrderDetails>(`/orders/${id}/cancel`).then((r) => r.data),
   };
 }
 

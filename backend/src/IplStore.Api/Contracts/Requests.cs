@@ -76,3 +76,10 @@ public sealed class PageQuery
     [Range(1, 500)]
     public int? PageSize { get; init; }
 }
+
+/// <summary>POST /api/v1/orders/{orderId}/payment</summary>
+public sealed class PayOrderRequest
+{
+    /// <summary>Demo only: true makes the dummy gateway decline the payment.</summary>
+    public bool SimulateFailure { get; init; }
+}

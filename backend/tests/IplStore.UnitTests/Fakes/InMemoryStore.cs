@@ -72,6 +72,14 @@ public sealed class InMemoryStore
         }
     }
 
+    internal void Release(Guid productId, int quantity)
+    {
+        lock (_gate)
+        {
+            Stock[productId] += quantity;
+        }
+    }
+
     internal Dictionary<Guid, int> SnapshotStock() => new(Stock);
 
     internal void Commit()

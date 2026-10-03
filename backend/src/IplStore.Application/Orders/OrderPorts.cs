@@ -10,6 +10,32 @@ public interface IOrderRepository
 
     /// <summary>Stages a new order; persisted when the unit of work commits.</summary>
     void Add(Order order);
+
+    /// <summary>
+    /// Loads the customer's order (with lines) under a row lock, so a concurrent pay and cancel
+    /// of the same order are serialised. Must run inside a unit-of-work transaction.
+    /// </summary>
+    Task<Order?> FindForUpdateAsync(Guid customerId, Guid orderId, CancellationToken cancellationToken);
+}
+
+/// <summary>Charge request sent to the payment provider.</summary>
+/// <param name="SimulateFailure">Test-mode switch for the dummy gateway (a real provider would use test card numbers).</param>
+public sealed record PaymentRequest(Guid OrderId, string OrderNumber, decimal Amount, string Currency, bool SimulateFailure);
+
+public sealed record PaymentResult(bool Succeeded, string? TransactionId, string? FailureReason)
+{
+    public static PaymentResult Success(string transactionId) => new(true, transactionId, null);
+
+    public static PaymentResult Declined(string reason) => new(false, null, reason);
+}
+
+/// <summary>
+/// Port to the payment provider. Implementations must treat <see cref="PaymentRequest.OrderId"/>
+/// as the idempotency key, so charging the same order twice never takes money twice.
+/// </summary>
+public interface IPaymentGateway
+{
+    Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken cancellationToken);
 }
 
 /// <summary>

@@ -17,4 +17,10 @@ public interface IProductRepository
     /// thousands of concurrent checkouts, because the check and the write are one statement.
     /// </summary>
     Task<bool> TryReserveStockAsync(Guid productId, int quantity, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Compensation for <see cref="TryReserveStockAsync"/>: puts reserved units back
+    /// (<c>UPDATE products SET stock = stock + @q WHERE id = @id</c>), e.g. when an unpaid order is cancelled.
+    /// </summary>
+    Task ReleaseStockAsync(Guid productId, int quantity, CancellationToken cancellationToken);
 }

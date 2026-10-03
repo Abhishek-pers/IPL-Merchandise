@@ -42,4 +42,17 @@ internal sealed class ProductRepository : IProductRepository
 
         return affected == 1;
     }
+
+    public async Task ReleaseStockAsync(Guid productId, int quantity, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(quantity);
+
+        // Relative increment in one statement, so it cannot overwrite a concurrent reservation.
+        // No IsActive filter: units reserved before a product was deactivated still go back.
+        await _db.Products
+            .Where(p => p.Id == productId)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(p => p.StockQuantity, p => p.StockQuantity + quantity),
+                cancellationToken);
+    }
 }
