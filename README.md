@@ -10,7 +10,7 @@ It is built as a senior-level reference solution: Clean Architecture, SOLID, saf
 | Database | PostgreSQL 16 (ACID). Normalised write model + **denormalised read model** |
 | Client | React 18 + TypeScript + Vite (kept deliberately plain) |
 | Tests | xUnit + FluentAssertions (unit tests), WebApplicationFactory + Testcontainers (integration tests), Vitest |
-| Delivery | Docker, docker-compose, GitHub Actions (CI, app CD and infra CD as separate pipelines), Terraform on Azure |
+| Delivery | Docker, docker-compose. GitHub Actions: CI on every PR and feature branch; CD (`cd.yml`) deploys to Azure **dev** on push to `main`, signing in with OIDC. Terraform for Azure infrastructure (applied manually). Prod promotion is designed, not implemented ([docs/13](docs/13-azure-deployment-runbook.md)) |
 
 ---
 
@@ -110,7 +110,7 @@ Every request carries an `X-Customer-Id` header, which stands in for authenticat
 |---|---|---|---|---|
 | 1 | Product list with prices | `pages/ProductListPage.tsx` | `GET /api/v1/products` | `CatalogService`, `CatalogQueries` |
 | 2 | Product details | `pages/ProductDetailsPage.tsx` | `GET /api/v1/products/{id}` | `CatalogQueries.GetDetailsAsync` |
-| 3 | Search by name, type, franchise | filters on the list page | `?search=&franchise=&category=&minPrice=&sort=` | `ICatalogFilter` pipeline |
+| 3 | Search by name, type, franchise | filters on the list page | `?search=&franchise=&category=&sort=` | `ICatalogFilter` pipeline |
 | 4 | Cart | `pages/CartPage.tsx` | `GET/POST/PUT/DELETE /api/v1/cart[/items]` | `Cart` aggregate, `CartService` |
 | 5 | Order history | `pages/OrderPages.tsx` | `POST/GET /api/v1/orders[/{id}]` | `CheckoutService`, `OrderQueries` |
 
@@ -172,7 +172,7 @@ Catalogue reads (more than 95% of traffic) go to **one flat, pre-joined table**,
 │       └── IplStore.IntegrationTests/ real HTTP + real PostgreSQL, parallel-request race tests
 ├── frontend/                     ← React + TS SPA, retrying API client, Vitest tests
 ├── infra/terraform/              ← Azure: Container Apps, PostgreSQL Flexible (HA + replica), Key Vault, ACR, SWA
-├── .github/workflows/            ← ci.yml · cd-app.yml · cd-infra.yml (+ reusable deploy/apply)
+├── .github/workflows/            ← ci.yml (build → test → docker build) · cd.yml (CI gate → deploy to Azure dev)
 ├── scripts/                      ← dev.ps1 / dev.sh / verify-local.cmd
 └── docker-compose.yml
 ```
@@ -187,7 +187,7 @@ Catalogue reads (more than 95% of traffic) go to **one flat, pre-joined table**,
 | [04 Concurrency, idempotency, retry](docs/04-concurrency-idempotency-retry.md) | Every race condition we handle, with failure scenarios |
 | [05 API reference](docs/05-api-reference.md) | Endpoints, headers, status and error codes |
 | [06 Distributed database](docs/06-distributed-database.md) | HA, read replicas, sharding with Citus, partitioning |
-| [07 Deployment & roadmap](docs/07-deployment-roadmap.md) | Azure resources, CI/CD, code vs infra deployment, phased roadmap |
+| [07 Deployment & roadmap](docs/07-deployment-roadmap.md) | Azure resources, CI/CD (CI and dev deployment implemented; prod promotion designed), code vs infra deployment, phased roadmap |
 | [08 Change playbook](docs/08-change-playbook.md) | **How to make common changes quickly and cleanly (for the live review)** |
 | [09 Review guide](docs/09-review-guide.md) | Walkthrough order, trade-offs, likely questions |
 | [10 Design document](docs/10-design-document.md) | **Everything in one place: code flow, sequence diagrams, DB, trade-offs and a demo playbook** |

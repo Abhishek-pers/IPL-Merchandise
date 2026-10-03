@@ -342,7 +342,6 @@ code{font:13px var(--mono);background:var(--accent-soft);padding:1px 5px;border-
     SearchTermFilter ..|&gt; ICatalogFilter
     FranchiseFilter ..|&gt; ICatalogFilter
     CategoryFilter ..|&gt; ICatalogFilter
-    PriceRangeFilter ..|&gt; ICatalogFilter
     InStockFilter ..|&gt; ICatalogFilter
 </pre></div></section>
 
@@ -505,16 +504,16 @@ code{font:13px var(--mono);background:var(--accent-soft);padding:1px 5px;border-
 <p style="margin-top:12px">Infrastructure (Terraform) and application releases ship through separate pipelines. Terraform ignores the container image; the app pipeline builds once, runs the migration job, then shifts traffic blue/green between revisions.</p>
 <div class="diagram"><pre class="mermaid">flowchart LR
     PR[Pull request] --&gt; CI
-    subgraph CI[ci.yml - every PR and push]
-        B[backend: restore, build -warnaserror,&lt;br/&gt;unit tests + coverage] --&gt; IT[integration tests&lt;br/&gt;Testcontainers PostgreSQL]
+    subgraph CI[ci.yml - PRs and feature branches, and the gate inside cd.yml - IMPLEMENTED]
+        B[backend: restore, build,&lt;br/&gt;unit tests] --&gt; IT[integration tests&lt;br/&gt;Testcontainers PostgreSQL]
         F[frontend: typecheck, vitest, build]
         B &amp; F --&gt; IMG[docker build api + web]
     end
     CI --&gt;|merge to main| CDAPP
-    subgraph CDAPP[cd-app.yml]
+    subgraph CDAPP[cd.yml - dev IMPLEMENTED, approval + prod DESIGNED]
         BUILD[build image once&lt;br/&gt;tag = git SHA → ACR] --&gt; DEV[deploy dev] --&gt; GATE{{manual approval}} --&gt; PROD[deploy prod]
     end
-    subgraph DEPLOY[deploy-environment.yml, per env]
+    subgraph DEPLOY[scripts/deploy.ps1, per env - IMPLEMENTED for dev]
         M1[1. migration job] --&gt; M2[2. new revision at 0%] --&gt; M3[3. smoke test revision URL] --&gt; M4[4. shift 100%] --&gt; M5[5. deploy SPA]
     end
     DEV -.-&gt; DEPLOY

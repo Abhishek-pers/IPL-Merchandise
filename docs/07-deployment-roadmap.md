@@ -36,6 +36,9 @@ Estimated dev cost is roughly the price of a B1ms DB, with the API scaling to ze
 
 ## 7.2 Code deployment and infra deployment are separate
 
+> **Status.** Implemented: `ci.yml` (PRs and feature branches: build → unit + integration tests → frontend typecheck/test/build → Docker build) and `cd.yml` (push to `main` or manual run: CI as a gate → Azure sign-in with GitHub OIDC → `scripts/deploy.ps1` to **dev**). See [13 · Azure deployment runbook](13-azure-deployment-runbook.md).
+> **Designed, not implemented:** promotion to prod with a manual approval gate, and a Terraform pipeline (`cd-infra.yml`); Terraform is applied manually today. The table and diagram below show the target design.
+
 | | **Infrastructure pipeline** (`cd-infra.yml`) | **Application pipeline** (`cd-app.yml`) |
 |---|---|---|
 | Trigger | changes under `infra/**` | changes under `backend/**`, `frontend/**`, `database/**` |
@@ -49,19 +52,21 @@ reverts an app release, and an app release never needs Terraform.
 
 ## 7.3 CI/CD pipelines (GitHub Actions)
 
+`ci.yml` and `cd.yml` (dev only) are implemented. Prod promotion with approval is the target design. `deploy.ps1` smoke-tests the new revision and then retires the old ones; starting the new revision at 0% traffic is not implemented yet.
+
 ```mermaid
 flowchart LR
     PR[Pull request] --> CI
-    subgraph CI[ci.yml - every PR and push]
-        B[backend: restore, build -warnaserror,<br/>unit tests + coverage] --> IT[integration tests<br/>Testcontainers PostgreSQL]
+    subgraph CI[ci.yml - PRs and feature branches, and the gate inside cd.yml - IMPLEMENTED]
+        B[backend: restore, build,<br/>unit tests] --> IT[integration tests<br/>Testcontainers PostgreSQL]
         F[frontend: typecheck, vitest, build]
         B & F --> IMG[docker build api + web]
     end
     CI -->|merge to main| CDAPP
-    subgraph CDAPP[cd-app.yml]
+    subgraph CDAPP[cd.yml - dev IMPLEMENTED, approval + prod DESIGNED]
         BUILD[build image once<br/>tag = git SHA → ACR] --> DEV[deploy dev] --> GATE{{manual approval}} --> PROD[deploy prod]
     end
-    subgraph DEPLOY[deploy-environment.yml, per env]
+    subgraph DEPLOY[scripts/deploy.ps1, per env - IMPLEMENTED for dev]
         M1[1. migration job] --> M2[2. new revision at 0%] --> M3[3. smoke test revision URL] --> M4[4. shift 100%] --> M5[5. deploy SPA]
     end
     DEV -.-> DEPLOY
@@ -81,7 +86,7 @@ Principles:
 2. Create the Terraform state storage (`rg-iplstore-tfstate / stiplstoretfstate / tfstate`).
 3. GitHub secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, and per environment `SWA_DEPLOYMENT_TOKEN` (Terraform output).
 4. GitHub environment variables (from Terraform outputs): `RESOURCE_GROUP`, `API_APP_NAME`, `MIGRATION_JOB_NAME`, `ACR_LOGIN_SERVER`, `API_BASE_URL`.
-5. Run **CD - Infrastructure** once, then **CD - Application**.
+5. Apply Terraform once (manually, see docs/13), then run **CD** (push to `main` or "Run workflow").
 
 ## 7.4 Environments and configuration
 

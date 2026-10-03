@@ -112,4 +112,4 @@ Domain, Application, Api and the unit tests are untouched. That is the payoff of
 | DI wiring / options binding | `backend/src/IplStore.Api/Composition/CompositionRoot.cs` |
 | Schema | `database/migrations/` |
 | Cloud resources | `infra/terraform/*.tf` |
-| Pipelines | `.github/workflows/*.yml` |
+| Pipelines | `.github/workflows/ci.yml` (CI), `.github/workflows/cd.yml` (deploy to Azure dev); see docs/13 |

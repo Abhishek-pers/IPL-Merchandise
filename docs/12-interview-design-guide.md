@@ -4,7 +4,7 @@ This guide connects the shopper's actions to the API, application use cases, dom
 
 ## 1. Opening Summary
 
-> “This is a modular monolith for IPL merchandise. The React application calls one versioned ASP.NET Core API. The API is separated into HTTP, application, domain, and infrastructure projects, but those backend projects deploy together as one API. PostgreSQL is the source of truth. The main reliability goals are correct cart updates, no overselling, and no duplicate checkout effects when a request is repeated.”
+> “This is a monolith built with Clean Architecture for IPL merchandise. The React application calls one versioned ASP.NET Core API. The API is separated into HTTP, application, domain, and infrastructure projects, which deploy together as one API. Inside each layer the code is grouped by feature (Catalog, Carts, Orders); those folders are the seams for future modules, but module boundaries are a convention, not enforced. PostgreSQL is the source of truth. The main reliability goals are correct cart updates, no overselling, and no duplicate checkout effects when a request is repeated.”
 
 Be precise about scope:
 
@@ -799,7 +799,7 @@ For any requested change, answer these before typing:
 
 ## 14. Short Defenses for Common Design Questions
 
-**Why not microservices now?** The domain is one checkout workflow with strong transactional consistency requirements. A modular monolith keeps the order, cart, and stock transaction local. Split only when deployment, ownership, or scaling needs justify distributed consistency and operations.
+**Why not microservices now?** The domain is one checkout workflow with strong transactional consistency requirements. A single deployable keeps the order, cart, and stock changes in one local ACID transaction. It is layered, not a strict modular monolith: `CheckoutService` uses the Cart and Catalog repositories directly and all tables share one `DbContext`. The next step, if the team or domain grows, is a modular monolith: one project per feature, a small public interface per module (e.g. `IStockReservation`), a schema per module and architecture tests. Split into services only when deployment, ownership, or scaling needs justify distributed consistency and operations.
 
 **Why both normalized tables and `product_catalog`?** Normalized tables are the write source of truth; the flattened projection makes frequent catalogue reads/search cheaper. Triggers update it transactionally. The tradeoff is added database-side projection logic that must be tested and monitored.
 
