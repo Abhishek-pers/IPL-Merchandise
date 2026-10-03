@@ -41,6 +41,7 @@ export function ProductListPage() {
     <section>
       <h1>Official IPL merchandise</h1>
 
+      {/* Team buttons: one click filters by a franchise; clicking it again clears the filter. */}
       <nav className="team-shortcuts" aria-label="Browse by franchise">
         <button
           type="button"
@@ -60,24 +61,41 @@ export function ProductListPage() {
               aria-pressed={selected}
               onClick={() => update('franchise', selected ? undefined : franchise.code)}
             >
-              <span className="team-swatch" style={{ backgroundColor: franchise.primaryColor }} aria-hidden="true" />
+              <span
+                className="team-swatch"
+                style={{ backgroundColor: franchise.primaryColor }}
+                aria-hidden="true"
+              />
               {franchise.name}
             </button>
           );
         })}
       </nav>
 
+      {/* Filter bar. Every control writes to the URL, which triggers a new search. */}
       <form
         className="filters"
         onSubmit={(e) => {
           e.preventDefault();
-          update('search', String(new FormData(e.currentTarget).get('search') ?? '').trim() || undefined);
+          const text = String(new FormData(e.currentTarget).get('search') ?? '').trim();
+          update('search', text || undefined);
         }}
       >
-        <input name="search" type="search" placeholder="Search jerseys, caps, teams…" defaultValue={search.search} aria-label="Search" />
+        {/* Free-text search: applied on submit (Enter or the button), not on every keystroke. */}
+        <input
+          name="search"
+          type="search"
+          placeholder="Search jerseys, caps, teams…"
+          defaultValue={search.search}
+          aria-label="Search"
+        />
         <button type="submit">Search</button>
 
-        <select value={search.franchise?.[0] ?? ''} onChange={(e) => update('franchise', e.target.value || undefined)} aria-label="Franchise">
+        <select
+          value={search.franchise?.[0] ?? ''}
+          onChange={(e) => update('franchise', e.target.value || undefined)}
+          aria-label="Franchise"
+        >
           <option value="">All franchises</option>
           {franchises.data?.map((f) => (
             <option key={f.code} value={f.code}>
@@ -86,7 +104,11 @@ export function ProductListPage() {
           ))}
         </select>
 
-        <select value={search.category?.[0] ?? ''} onChange={(e) => update('category', e.target.value || undefined)} aria-label="Product type">
+        <select
+          value={search.category?.[0] ?? ''}
+          onChange={(e) => update('category', e.target.value || undefined)}
+          aria-label="Product type"
+        >
           <option value="">All types</option>
           {categories.data?.map((c) => (
             <option key={c.code} value={c.code}>
@@ -113,6 +135,7 @@ export function ProductListPage() {
         </label>
       </form>
 
+      {/* Results: error with retry, spinner on first load, then the product grid and pager. */}
       <ErrorBanner error={products.error} onRetry={products.reload} />
       {products.loading && !products.data && <Loading />}
 

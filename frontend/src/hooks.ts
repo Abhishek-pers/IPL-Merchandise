@@ -28,8 +28,10 @@ export function useAsync<T>(load: () => Promise<T>, deps: readonly unknown[]): A
   return { ...state, reload };
 }
 
+/** One cached formatter per currency: creating Intl.NumberFormat on every render is slow. */
 const formatters = new Map<string, Intl.NumberFormat>();
 
+/** Formats an amount the Indian way, e.g. 2499 -> "₹2,499.00". */
 export function formatMoney(amount: number, currency = 'INR'): string {
   let formatter = formatters.get(currency);
   if (!formatter) {

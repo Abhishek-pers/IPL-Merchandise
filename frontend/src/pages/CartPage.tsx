@@ -70,6 +70,8 @@ export function CartPage() {
     <section>
       <h1>Your cart</h1>
       <ErrorBanner error={error} />
+
+      {/* One row per cart line: product, unit price, quantity stepper, line total, remove. */}
       <table className="table">
         <thead>
           <tr>
@@ -90,12 +92,21 @@ export function CartPage() {
               <td>
                 <Money amount={line.unitPrice} currency={current.price.currency} />
               </td>
+              {/* Quantity stepper: sets the new absolute quantity; going to 0 removes the line. */}
               <td className="qty">
-                <button type="button" disabled={busy} onClick={() => mutate(() => storeApi.setCartQuantity(line.productId, line.quantity - 1))}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => mutate(() => storeApi.setCartQuantity(line.productId, line.quantity - 1))}
+                >
                   −
                 </button>
                 <span>{line.quantity}</span>
-                <button type="button" disabled={busy} onClick={() => mutate(() => storeApi.setCartQuantity(line.productId, line.quantity + 1))}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => mutate(() => storeApi.setCartQuantity(line.productId, line.quantity + 1))}
+                >
                   +
                 </button>
               </td>
@@ -103,7 +114,12 @@ export function CartPage() {
                 <Money amount={line.lineTotal} currency={current.price.currency} />
               </td>
               <td>
-                <button type="button" className="link-button" disabled={busy} onClick={() => mutate(() => storeApi.removeFromCart(line.productId))}>
+                <button
+                  type="button"
+                  className="link-button"
+                  disabled={busy}
+                  onClick={() => mutate(() => storeApi.removeFromCart(line.productId))}
+                >
                   Remove
                 </button>
               </td>
@@ -112,6 +128,7 @@ export function CartPage() {
         </tbody>
       </table>
 
+      {/* Totals come from the same pricing policy checkout uses, so the preview always matches. */}
       <div className="summary">
         <PriceTable price={current.price} />
         <button type="button" className="primary" onClick={checkout} disabled={busy}>
