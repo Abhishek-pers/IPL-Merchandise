@@ -26,6 +26,13 @@ resource "azurerm_container_app_environment" "main" {
   location                   = azurerm_resource_group.main.location
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   tags                       = local.tags
+
+  # Azure adds this serverless profile to every new environment. Declaring it keeps
+  # Terraform from trying to remove it on each plan (perpetual drift).
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
 }
 
 locals {
@@ -45,6 +52,7 @@ resource "azurerm_container_app" "api" {
   resource_group_name          = azurerm_resource_group.main.name
   container_app_environment_id = azurerm_container_app_environment.main.id
   revision_mode                = "Multiple" # enables blue/green traffic splitting between revisions
+  workload_profile_name        = "Consumption"
   tags                         = local.tags
 
   identity {
@@ -147,6 +155,7 @@ resource "azurerm_container_app_job" "migrator" {
   resource_group_name          = azurerm_resource_group.main.name
   location                     = azurerm_resource_group.main.location
   container_app_environment_id = azurerm_container_app_environment.main.id
+  workload_profile_name        = "Consumption"
   replica_timeout_in_seconds   = 600
   replica_retry_limit          = 2
   tags                         = local.tags
