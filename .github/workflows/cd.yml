@@ -1,0 +1,69 @@
+# -----------------------------------------------------------------------------
+# CD: test -> build image -> migrate -> new API revision -> smoke test -> web.
+# Runs scripts/deploy.ps1, the SAME script used for manual deploys, so a local
+# deploy and a pipeline deploy cannot drift apart.
+#
+# Auth: GitHub OIDC -> Entra app "github-iplstore-deploy" (federated credential for
+# environment "dev", Contributor on rg-iplstore-dev only). No Azure secret is stored.
+# Required repository VARIABLES (Settings > Secrets and variables > Actions > Variables):
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+# Infrastructure changes are applied separately with Terraform (infra/terraform).
+# -----------------------------------------------------------------------------
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:       # "Run workflow" button: deploy any branch to dev on demand
+
+permissions:
+  contents: read
+  id-token: write          # lets the job request a GitHub OIDC token for Azure login
+
+# Never run two deployments to the same environment at once.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+
+  deploy-dev:
+    name: Deploy to dev
+    needs: ci
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+      url: ${{ steps.deploy.outputs.web_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Azure login (OIDC, no secrets)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade --only-show-errors
+
+      - name: Deploy (scripts/deploy.ps1)
+        id: deploy
+        shell: pwsh
+        run: |
+          ./scripts/deploy.ps1 -Environment dev -SkipTests   # tests already ran in the CI gate
+          $web = "https://" + (az staticwebapp show -n swa-iplstore-dev -g rg-iplstore-dev --query defaultHostname -o tsv)
+          "web_url=$web" >> $env:GITHUB_OUTPUT

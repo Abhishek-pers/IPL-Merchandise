@@ -1,0 +1,89 @@
+# -----------------------------------------------------------------------------
+# CI: build -> test -> docker build, on every pull request and push to a feature branch.
+# Pushes to main run it through cd.yml (workflow_call), as the gate before deploying.
+# -----------------------------------------------------------------------------
+name: CI
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the run that is still going. github.workflow is
+# the CALLER's name when run from cd.yml, so the gate never cancels a standalone CI run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend - build and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore IplStore.sln
+
+      - name: Build
+        run: dotnet build IplStore.sln -c Release --no-restore
+
+      - name: Unit tests
+        run: dotnet test tests/IplStore.UnitTests -c Release --no-build --logger trx --results-directory TestResults
+
+      # Testcontainers starts a real PostgreSQL 16 container; GitHub's Ubuntu runners have Docker.
+      - name: Integration tests
+        run: dotnet test tests/IplStore.IntegrationTests -c Release --no-build --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/TestResults
+
+  frontend:
+    name: Frontend - typecheck, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    name: Docker images
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build only, no push: proves both images still build. Pushing to ACR belongs to CD.
+      - name: Build API image
+        run: docker build -f backend/Dockerfile -t iplstore-api:${{ github.sha }} .
+
+      - name: Build web image
+        run: docker build -t iplstore-web:${{ github.sha }} frontend
