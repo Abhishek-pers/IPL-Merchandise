@@ -65,9 +65,9 @@ More: [01-architecture.md](01-architecture.md), [02-uml-class-diagram.md](02-uml
 
 | Req | Frontend | Endpoint | Controller | Use case | Data access |
 |---|---|---|---|---|---|
-| F1 | `pages/ProductListPage.tsx` | `GET /api/v1/products` | `CatalogControllers.cs` | `CatalogService.SearchAsync` | `CatalogQueries.SearchAsync` (read model) |
-| F2 | `pages/ProductDetailsPage.tsx` | `GET /api/v1/products/{id}` | `CatalogControllers.cs` | `CatalogService` | `CatalogQueries.GetDetailsAsync` |
-| F3 | filters on list page | `?search=&franchise=&category=&inStockOnly=&sort=` | same | `BuildCriteria` | `ICatalogFilter` pipeline (`CatalogFilters.cs`) |
+| F1 | `pages/ProductListPage.tsx` | `GET /api/v1/products` | `ProductsController.cs` | `CatalogService.SearchAsync` | `CatalogQueries.SearchAsync` (read model) |
+| F2 | `pages/ProductDetailsPage.tsx` | `GET /api/v1/products/{id}` | `ProductsController.cs` | `CatalogService` | `CatalogQueries.GetDetailsAsync` |
+| F3 | filters on list page | `?search=&franchise=&category=&inStockOnly=&sort=` | same | `BuildCriteria` | `ICatalogFilter` pipeline (one `*Filter.cs` class per filter in `CatalogFilters/`) |
 | F4 | `pages/CartPage.tsx` | `GET /cart`, `POST /cart/items`, `PUT/DELETE /cart/items/{productId}` | `CartController.cs` | `CartService` + `Cart` aggregate | `CartRepository` (row lock) |
 | F5 | `pages/OrderPages.tsx` | `POST /orders`, `GET /orders`, `GET /orders/{id}` | `OrdersController.cs` | `CheckoutService`, `OrderService` | `ProductRepository.TryReserveStockAsync`, `SalesQueries` |
 

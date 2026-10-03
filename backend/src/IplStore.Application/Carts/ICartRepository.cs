@@ -13,9 +13,3 @@ public interface ICartRepository
     /// </summary>
     Task<Cart> GetOrCreateForUpdateAsync(Guid customerId, CancellationToken cancellationToken);
 }
-
-/// <summary>Read-side port: the cart joined with current catalogue prices.</summary>
-public interface ICartQueries
-{
-    Task<CartView?> GetAsync(Guid customerId, CancellationToken cancellationToken);
-}

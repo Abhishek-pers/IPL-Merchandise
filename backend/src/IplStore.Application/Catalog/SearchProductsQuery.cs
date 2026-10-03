@@ -1,14 +1,5 @@
 namespace IplStore.Application.Catalog;
 
-/// <summary>Supported orderings for the product list.</summary>
-public enum ProductSort
-{
-    Name = 0,
-    PriceLowToHigh = 1,
-    PriceHighToLow = 2,
-    Newest = 3,
-}
-
 /// <summary>
 /// Raw search input as received from a client (every field optional).
 /// Parameter object: adding a new filter = adding a property, no signature changes.
@@ -32,14 +23,3 @@ public sealed record SearchProductsQuery
 
     public int? PageSize { get; init; }
 }
-
-/// <summary>
-/// Validated, normalised search criteria handed to the query side. Codes are upper-cased,
-/// the search text is trimmed and split into terms. Infrastructure can trust it blindly.
-/// </summary>
-public sealed record ProductSearchCriteria(
-    IReadOnlyList<string> SearchTerms,
-    IReadOnlyCollection<string> FranchiseCodes,
-    IReadOnlyCollection<string> CategoryCodes,
-    bool InStockOnly,
-    ProductSort Sort);

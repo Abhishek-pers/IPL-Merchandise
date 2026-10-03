@@ -31,9 +31,9 @@ INSERT INTO product_categories (id, code, name) VALUES ('c0000000-0000-0000-0000
 The filter drop-down, search and API pick it up automatically.
 
 ### C. Add a new search filter (e.g. "size = XL")
-1. `Application/Catalog/ProductSearch.cs`: add `string? Size` to `SearchProductsQuery` and `ProductSearchCriteria`.
+1. `Application/Catalog/SearchProductsQuery.cs` and `ProductSearchCriteria.cs`: add `string? Size` to both.
 2. `Application/Catalog/CatalogService.cs → BuildCriteria`: pass it through (and validate it).
-3. `Infrastructure/Queries/CatalogFilters/`: new class
+3. `Infrastructure/Queries/CatalogFilters/SizeFilter.cs`: new class
    ```csharp
    internal sealed class SizeFilter : ICatalogFilter
    {

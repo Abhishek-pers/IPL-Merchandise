@@ -30,39 +30,3 @@ internal sealed class SearchTermFilter : ICatalogFilter
              .Replace("%", EscapeCharacter + "%", StringComparison.Ordinal)
              .Replace("_", EscapeCharacter + "_", StringComparison.Ordinal);
 }
-
-/// <summary>Filter by one or more franchise codes (CSK, MI ...).</summary>
-internal sealed class FranchiseFilter : ICatalogFilter
-{
-    public IQueryable<CatalogItem> Apply(IQueryable<CatalogItem> query, ProductSearchCriteria criteria)
-    {
-        if (criteria.FranchiseCodes.Count == 0)
-        {
-            return query;
-        }
-
-        var codes = criteria.FranchiseCodes.ToList();
-        return query.Where(c => codes.Contains(c.FranchiseCode));
-    }
-}
-
-/// <summary>Filter by one or more product types (JERSEY, CAP ...).</summary>
-internal sealed class CategoryFilter : ICatalogFilter
-{
-    public IQueryable<CatalogItem> Apply(IQueryable<CatalogItem> query, ProductSearchCriteria criteria)
-    {
-        if (criteria.CategoryCodes.Count == 0)
-        {
-            return query;
-        }
-
-        var codes = criteria.CategoryCodes.ToList();
-        return query.Where(c => codes.Contains(c.CategoryCode));
-    }
-}
-
-internal sealed class InStockFilter : ICatalogFilter
-{
-    public IQueryable<CatalogItem> Apply(IQueryable<CatalogItem> query, ProductSearchCriteria criteria) =>
-        criteria.InStockOnly ? query.Where(c => c.StockQuantity > 0) : query;
-}

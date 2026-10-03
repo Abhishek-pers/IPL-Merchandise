@@ -1,16 +1,4 @@
-using IplStore.Domain.Customers;
-
 namespace IplStore.Application.Customers;
-
-public sealed record CustomerDto(Guid Id, string FullName, string Email);
-
-/// <summary>Persistence port for customers.</summary>
-public interface ICustomerRepository
-{
-    Task<Customer?> FindAsync(Guid customerId, CancellationToken cancellationToken);
-
-    Task<IReadOnlyList<Customer>> ListAsync(CancellationToken cancellationToken);
-}
 
 /// <summary>
 /// Lists shoppers for the demo "who am I" picker. In production this is replaced by an

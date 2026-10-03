@@ -1,6 +1,4 @@
-using IplStore.Application.Customers;
 using IplStore.Application.Orders;
-using IplStore.Domain.Customers;
 using IplStore.Domain.Orders;
 using IplStore.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -40,20 +38,4 @@ internal sealed class OrderRepository : IOrderRepository
             .Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == orderId && o.CustomerId == customerId, cancellationToken);
     }
-}
-
-internal sealed class CustomerRepository : ICustomerRepository
-{
-    private readonly StoreDbContext _db;
-
-    public CustomerRepository(StoreDbContext db)
-    {
-        _db = db;
-    }
-
-    public Task<Customer?> FindAsync(Guid customerId, CancellationToken cancellationToken) =>
-        _db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == customerId, cancellationToken);
-
-    public async Task<IReadOnlyList<Customer>> ListAsync(CancellationToken cancellationToken) =>
-        await _db.Customers.AsNoTracking().OrderBy(c => c.FullName).ToListAsync(cancellationToken);
 }

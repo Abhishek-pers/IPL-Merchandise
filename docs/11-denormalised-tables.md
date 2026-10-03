@@ -194,7 +194,7 @@ The stock of `CSK-JER-H` went from 120 to 118 after the checkout in the README s
 |---|---|
 | EF entity (read-only) | `backend/src/IplStore.Infrastructure/Persistence/ReadModels/CatalogItem.cs` |
 | Queries (search, details) | `backend/src/IplStore.Infrastructure/Queries/CatalogQueries.cs` |
-| Search filters | `backend/src/IplStore.Infrastructure/Queries/CatalogFilters/CatalogFilters.cs` |
+| Search filters | `backend/src/IplStore.Infrastructure/Queries/CatalogFilters/` (one `*Filter.cs` per filter) |
 | Context (replica-capable, no tracking) | `ReadOnlyStoreDbContext` in `Infrastructure/Persistence/StoreDbContext.cs` |
 
 The application **never writes** to `product_catalog`. Only the triggers do.
