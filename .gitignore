@@ -33,3 +33,6 @@ verify-log.txt
 # Local artefacts
 *.zip
 .claude/
+
+# Terraform: personal, machine-local variable values
+*.auto.tfvars

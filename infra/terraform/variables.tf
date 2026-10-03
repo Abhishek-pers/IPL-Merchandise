@@ -60,6 +60,15 @@ variable "postgres_geo_redundant_backup" {
   default = false
 }
 
+variable "postgres_entra_admins" {
+  description = "Entra ID admins of the Postgres server, keyed by object id. principal_type: User | Group | ServicePrincipal."
+  type = map(object({
+    principal_name = string
+    principal_type = string
+  }))
+  default = {}
+}
+
 # ---------------- api
 variable "api_min_replicas" {
   type    = number

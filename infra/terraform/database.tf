@@ -24,6 +24,15 @@ resource "azurerm_postgresql_flexible_server" "main" {
   public_network_access_enabled = true # roadmap: VNet integration + private endpoint (docs/07)
   zone                          = "1"
 
+  # People sign in with their Entra ID account (no shared password). Password auth stays on
+  # only because the API still uses the ipladmin connection string; next step is moving the
+  # API to its managed identity and turning password auth off.
+  authentication {
+    active_directory_auth_enabled = true
+    password_auth_enabled         = true
+    tenant_id                     = data.azurerm_client_config.current.tenant_id
+  }
+
   dynamic "high_availability" {
     for_each = var.postgres_high_availability ? [1] : []
     content {
@@ -38,6 +47,18 @@ resource "azurerm_postgresql_flexible_server" "main" {
     # Azure may move the primary to the standby zone after a failover; don't fight it.
     ignore_changes = [zone, high_availability[0].standby_availability_zone]
   }
+}
+
+# Entra ID administrators of the server (people or groups). Supplied per environment through
+# a git-ignored *.auto.tfvars file so personal identities are not committed.
+resource "azurerm_postgresql_flexible_server_active_directory_administrator" "admins" {
+  for_each            = var.postgres_entra_admins
+  server_name         = azurerm_postgresql_flexible_server.main.name
+  resource_group_name = azurerm_resource_group.main.name
+  tenant_id           = data.azurerm_client_config.current.tenant_id
+  object_id           = each.key
+  principal_name      = each.value.principal_name
+  principal_type      = each.value.principal_type
 }
 
 resource "azurerm_postgresql_flexible_server_database" "store" {
