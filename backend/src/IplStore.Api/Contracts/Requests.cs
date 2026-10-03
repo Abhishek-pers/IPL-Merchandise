@@ -5,7 +5,7 @@ namespace IplStore.Api.Contracts;
 
 /// <summary>
 /// Query-string model for GET /api/v1/products.
-/// Example: <c>?search=jersey&amp;franchise=CSK,MI&amp;category=JERSEY&amp;minPrice=500&amp;sort=PriceLowToHigh&amp;page=1&amp;pageSize=12</c>
+/// Example: <c>?search=jersey&amp;franchise=CSK,MI&amp;category=JERSEY&amp;sort=PriceLowToHigh&amp;page=1&amp;pageSize=12</c>
 /// </summary>
 public sealed class SearchProductsRequest
 {
@@ -17,12 +17,6 @@ public sealed class SearchProductsRequest
 
     /// <summary>Category code(s): JERSEY, CAP, FLAG, AUTOGRAPHED_PHOTO, ACCESSORY.</summary>
     public string[]? Category { get; init; }
-
-    [Range(0d, 10_000_000d)]
-    public decimal? MinPrice { get; init; }
-
-    [Range(0d, 10_000_000d)]
-    public decimal? MaxPrice { get; init; }
 
     public bool InStockOnly { get; init; }
 
@@ -39,8 +33,6 @@ public sealed class SearchProductsRequest
         Search = Search,
         Franchises = Franchise ?? Array.Empty<string>(),
         Categories = Category ?? Array.Empty<string>(),
-        MinPrice = MinPrice,
-        MaxPrice = MaxPrice,
         InStockOnly = InStockOnly,
         Sort = Sort,
         Page = Page,

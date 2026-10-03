@@ -121,8 +121,6 @@ export interface ProductSearch {
   search?: string;
   franchise?: string[];
   category?: string[];
-  minPrice?: number;
-  maxPrice?: number;
   inStockOnly?: boolean;
   sort?: ProductSort;
   page?: number;

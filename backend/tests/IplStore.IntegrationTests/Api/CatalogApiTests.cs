@@ -71,9 +71,9 @@ public sealed class CatalogApiTests : ApiTestBase
     }
 
     [Fact]
-    public async Task Invalid_price_range_is_a_400()
+    public async Task Invalid_query_parameters_are_a_400()
     {
-        var response = await Client.GetAsync("/api/v1/products?minPrice=900&maxPrice=100");
+        var response = await Client.GetAsync("/api/v1/products?pageSize=0");
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }

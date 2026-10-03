@@ -218,7 +218,6 @@ classDiagram
     SearchTermFilter ..|> ICatalogFilter
     FranchiseFilter ..|> ICatalogFilter
     CategoryFilter ..|> ICatalogFilter
-    PriceRangeFilter ..|> ICatalogFilter
     InStockFilter ..|> ICatalogFilter
 ```
 

@@ -27,14 +27,6 @@ public sealed class CatalogServiceTests
     }
 
     [Fact]
-    public void Min_price_greater_than_max_price_is_a_validation_error()
-    {
-        var act = () => CatalogService.BuildCriteria(new SearchProductsQuery { MinPrice = 500, MaxPrice = 100 }, Options);
-
-        act.Should().Throw<RequestValidationException>().Which.Errors.Should().ContainKey(nameof(SearchProductsQuery.MaxPrice));
-    }
-
-    [Fact]
     public void Too_long_search_text_is_a_validation_error()
     {
         var act = () => CatalogService.BuildCriteria(new SearchProductsQuery { Search = new string('x', 21) }, Options);

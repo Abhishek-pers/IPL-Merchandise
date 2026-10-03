@@ -104,7 +104,7 @@ erDiagram
 | 2 | `sku` | `varchar(40)` | no | `products.sku` | Display, search |
 | 3 | `name` | `varchar(200)` | no | `products.name` | Display, sort "Name", search |
 | 4 | `description` | `text` | no | `products.description` | Details page |
-| 5 | `price` | `numeric(12,2)` | no | `products.price` | Price filter, price sorts |
+| 5 | `price` | `numeric(12,2)` | no | `products.price` | Price shown on list and details, price sorts |
 | 6 | `currency` | `char(3)` | no | `products.currency` | Display |
 | 7 | `stock_quantity` | `integer` | no | `products.stock_quantity` | "In stock only" filter, "Sold out" badge |
 | 8 | `is_active` | `boolean` | no | `products.is_active` | Hides discontinued products (partial indexes) |
@@ -147,7 +147,7 @@ A search for `mumbai cap` becomes `search_text ILIKE '%mumbai%' AND search_text 
 | `ix_product_catalog_search_trgm` | `gin (search_text gin_trgm_ops)` | `?search=` (fast `ILIKE '%term%'`) |
 | `ix_product_catalog_franchise` | `btree (franchise_code) WHERE is_active` | `?franchise=CSK` |
 | `ix_product_catalog_category` | `btree (category_code) WHERE is_active` | `?category=JERSEY` |
-| `ix_product_catalog_price` | `btree (price) WHERE is_active` | `?minPrice/maxPrice`, price sorts |
+| `ix_product_catalog_price` | `btree (price) WHERE is_active` | price sorts (low to high, high to low) |
 | `ix_product_catalog_created` | `btree (created_at DESC) WHERE is_active` | `?sort=Newest` |
 
 The partial indexes (`WHERE is_active`) skip discontinued products, so they stay smaller.

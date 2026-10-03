@@ -61,24 +61,6 @@ internal sealed class CategoryFilter : ICatalogFilter
     }
 }
 
-internal sealed class PriceRangeFilter : ICatalogFilter
-{
-    public IQueryable<CatalogItem> Apply(IQueryable<CatalogItem> query, ProductSearchCriteria criteria)
-    {
-        if (criteria.MinPrice is { } min)
-        {
-            query = query.Where(c => c.Price >= min);
-        }
-
-        if (criteria.MaxPrice is { } max)
-        {
-            query = query.Where(c => c.Price <= max);
-        }
-
-        return query;
-    }
-}
-
 internal sealed class InStockFilter : ICatalogFilter
 {
     public IQueryable<CatalogItem> Apply(IQueryable<CatalogItem> query, ProductSearchCriteria criteria) =>

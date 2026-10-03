@@ -69,7 +69,7 @@ describe('httpClient', () => {
 
 describe('helpers', () => {
   it('builds query strings, skipping empty values and repeating arrays', () => {
-    expect(buildQueryString({ search: 'cap', franchise: ['CSK', 'MI'], minPrice: undefined, category: [] })).toBe(
+    expect(buildQueryString({ search: 'cap', franchise: ['CSK', 'MI'], sort: undefined, category: [] })).toBe(
       '?search=cap&franchise=CSK&franchise=MI',
     );
     expect(buildQueryString({})).toBe('');

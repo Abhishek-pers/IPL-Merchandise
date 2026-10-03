@@ -46,7 +46,6 @@ public static class DependencyInjection
         services.AddSingleton<ICatalogFilter, SearchTermFilter>();
         services.AddSingleton<ICatalogFilter, FranchiseFilter>();
         services.AddSingleton<ICatalogFilter, CategoryFilter>();
-        services.AddSingleton<ICatalogFilter, PriceRangeFilter>();
         services.AddSingleton<ICatalogFilter, InStockFilter>();
 
         services.AddSingleton<IOrderNumberGenerator, OrderNumberGenerator>();

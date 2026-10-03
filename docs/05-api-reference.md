@@ -14,7 +14,7 @@ Base URL: `http://localhost:5080/api/v1`. Interactive docs: **`/swagger`**. Read
 
 | Method | Path | Body / query | Success | Errors |
 |---|---|---|---|---|
-| GET | `/products` | `search, franchise[], category[], minPrice, maxPrice, inStockOnly, sort (Name, PriceLowToHigh, PriceHighToLow, Newest), page, pageSize` | 200 `PagedResult<ProductSummary>` | 400 |
+| GET | `/products` | `search, franchise[], category[], inStockOnly, sort (Name, PriceLowToHigh, PriceHighToLow, Newest), page, pageSize` | 200 `PagedResult<ProductSummary>` | 400 |
 | GET | `/products/{id}` | – | 200 `ProductDetails` | 404 `product.not_found` |
 | GET | `/franchises` | – | 200 `Franchise[]` (cached 5 min) | – |
 | GET | `/categories` | – | 200 `Category[]` (cached 5 min) | – |

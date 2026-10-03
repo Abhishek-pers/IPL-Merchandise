@@ -65,16 +65,6 @@ public sealed class CatalogService : ICatalogService
             errors[nameof(query.Search)] = new[] { $"Search text must be at most {options.MaxSearchLength} characters." };
         }
 
-        if (query.MinPrice is < 0m)
-        {
-            errors[nameof(query.MinPrice)] = new[] { "Minimum price must not be negative." };
-        }
-
-        if (query.MinPrice is not null && query.MaxPrice is not null && query.MinPrice > query.MaxPrice)
-        {
-            errors[nameof(query.MaxPrice)] = new[] { "Maximum price must be greater than or equal to minimum price." };
-        }
-
         var franchises = NormaliseCodes(query.Franchises);
         var categories = NormaliseCodes(query.Categories);
         if (franchises.Count > options.MaxFilterValues)
@@ -104,7 +94,7 @@ public sealed class CatalogService : ICatalogService
             .Take(options.MaxSearchTerms)
             .ToList();
 
-        return new ProductSearchCriteria(terms, franchises, categories, query.MinPrice, query.MaxPrice, query.InStockOnly, query.Sort);
+        return new ProductSearchCriteria(terms, franchises, categories, query.InStockOnly, query.Sort);
     }
 
     private static IReadOnlyCollection<string> NormaliseCodes(IEnumerable<string>? codes) =>

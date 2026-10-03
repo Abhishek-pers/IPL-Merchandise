@@ -24,10 +24,6 @@ public sealed record SearchProductsQuery
     /// <summary>Category codes, e.g. ["JERSEY", "CAP"].</summary>
     public IReadOnlyCollection<string> Categories { get; init; } = Array.Empty<string>();
 
-    public decimal? MinPrice { get; init; }
-
-    public decimal? MaxPrice { get; init; }
-
     public bool InStockOnly { get; init; }
 
     public ProductSort Sort { get; init; } = ProductSort.Name;
@@ -45,7 +41,5 @@ public sealed record ProductSearchCriteria(
     IReadOnlyList<string> SearchTerms,
     IReadOnlyCollection<string> FranchiseCodes,
     IReadOnlyCollection<string> CategoryCodes,
-    decimal? MinPrice,
-    decimal? MaxPrice,
     bool InStockOnly,
     ProductSort Sort);
