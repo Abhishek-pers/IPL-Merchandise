@@ -193,6 +193,10 @@ Catalogue reads (more than 95% of traffic) go to **one flat, pre-joined table**,
 | [10 Design document](docs/10-design-document.md) | **Everything in one place: code flow, sequence diagrams, DB, trade-offs and a demo playbook** |
 | [11 Denormalised tables](docs/11-denormalised-tables.md) | `product_catalog` read model column by column, sync triggers, indexes, order snapshots, trade-offs |
 | [12 Design guide](docs/12-design-guide.md) | End-to-end user flows, UML classes/interfaces, database ERD, SOLID/pattern evidence, extension strategy, failure cases, and panel walkthrough |
+| [16 Azure infrastructure and CI/CD guide](docs/16-azure-cicd-infra-guide.md) | Diagrams of every Azure resource, identities and roles, Terraform creation order, the push-to-main pipeline, what is read from where at start-up and per request, and the gaps to production |
+| [17 Request data path](docs/17-request-data-path.md) | Browser to PostgreSQL and back for reads and writes (search, cart, add to cart, checkout, pay, cancel), first-time setup vs repeated, retries on every hop |
+| [18 UI to database, layer by layer](docs/18-ui-to-database-layers.md) | What each screen calls, and how the call moves through the UI, HTTP, Application, Domain and Infrastructure layers to the database, with each layer's configuration and touchpoints |
+| [19 Design decisions](docs/19-design-decisions.md) | Every major choice (layered monolith, Container Apps, PostgreSQL, Terraform, CQRS-lite, React + Vite, ...) with the alternatives, when they would win, and what would change our mind |
 | [ADRs](docs/adr) | Why each key decision was made |
 
 ## 6. Tunable parameters (no code changes)

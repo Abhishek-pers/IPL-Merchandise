@@ -97,6 +97,39 @@ pipeline or GitHub.
 **Honest gap:** the connection string still contains the admin password. Next step: Entra authentication for the API's
 identity, then password auth off. Entra sign-in for people is already on: [database.tf:30-34](../infra/terraform/database.tf#L30-L34), [database.tf:54](../infra/terraform/database.tf#L54).
 
+**The gap as a picture.** The managed identity protects *access to the secret*; the database login itself is still a password.
+
+```mermaid
+flowchart TB
+    subgraph TODAY["TODAY - secret protected, login still a password"]
+        direction LR
+        TF1["Terraform<br/>random_password"] -->|"connection string<br/>incl. admin password"| KV1[("Key Vault<br/>db-connection-primary")]
+        KV1 -->|"read as managed identity<br/>(Key Vault Secrets User)"| CA1["Container App<br/>env Database__ConnectionString"]
+        CA1 -->|"Npgsql: Username=ipladmin<br/>Password=******"| PG1[("PostgreSQL<br/>password auth ON")]
+    end
+
+    subgraph TARGET["TARGET - passwordless"]
+        direction LR
+        CA2["Container App<br/>connection string WITHOUT password"] -->|"1. get token as<br/>managed identity"| ENTRA["Microsoft Entra ID"]
+        ENTRA -->|"2. short-lived token<br/>(about 1 hour)"| CA2
+        CA2 -->|"3. Npgsql: User=id-iplstore-dev-api<br/>Password=token"| PG2[("PostgreSQL<br/>Entra auth only")]
+        PG2 -.->|"least-privilege role:<br/>DML on app tables, not admin"| CA2
+    end
+
+    TODAY ~~~ TARGET
+    style TODAY stroke:#d97706,stroke-width:2px
+    style TARGET stroke:#16a34a,stroke-width:2px
+```
+
+| | Today | Target |
+|---|---|---|
+| Who the API logs in as | `ipladmin` (server admin) | Its managed identity, as a database role with only the rights the app needs |
+| Credential | Long-lived password, in Key Vault | Short-lived Entra token, fetched on demand; nothing to store or rotate |
+| What a leaked connection string gives | Full admin access to the database | Nothing (it has no password) |
+| What Key Vault still holds | The connection string with the password | Nothing for the database (other secrets only) |
+
+**Steps to close it:** (1) Terraform: allow Entra auth for the API identity on the server and create a PostgreSQL role for `id-iplstore-dev-api` with only `SELECT/INSERT/UPDATE/DELETE` on the app tables; run migrations as a separate, higher-privilege identity. (2) Code: in `ConfigureNpgsql`, use `NpgsqlDataSourceBuilder.UsePeriodicPasswordProvider` with `DefaultAzureCredential` to fetch a token for the `https://ossrdbms-aad.database.windows.net/.default` scope. (3) Remove the password from the connection string and the `db-primary` secret. (4) Turn password authentication off on the server.
+
 ---
 
 ## 4. "How does the pipeline authenticate to Azure?"
