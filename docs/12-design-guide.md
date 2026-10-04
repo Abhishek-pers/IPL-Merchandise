@@ -1,4 +1,4 @@
-# Interview Design Guide: IPL Franchise Store
+# Design Guide: IPL Franchise Store
 
 This guide connects the shopper's actions to the API, application use cases, domain rules, persistence ports, PostgreSQL tables, and tests. Use it to explain both **what is implemented** and **why it was designed that way**.
 
@@ -8,9 +8,9 @@ This guide connects the shopper's actions to the API, application use cases, dom
 
 Be precise about scope:
 
-- Checkout creates an order in `Placed` status. There is no payment provider, payment service, payment table, or payment webhook implemented.
+- Checkout creates an order in `Placed` status. Payment is a second step through `IPaymentService` and an `IPaymentGateway` port; the only adapter is `FakePaymentGateway` (in-memory, simulated decline). There is no real provider, payment table, or webhook.
 - Customer selection uses `X-Customer-Id` as a demo identity, not production authentication.
-- Terraform describes an Azure target. It is not proof that the application is already deployed there.
+- The app is deployed to Azure (Static Web Apps + Container Apps + PostgreSQL Flexible Server) from Terraform and `scripts/deploy.ps1` / GitHub Actions. It is a single dev environment, not a production setup.
 - The public API is REST over HTTP/JSON, not gRPC. Internal application interactions are direct C# calls through dependency-injected interfaces, not RPC.
 - The code has deliberate SOLID and pattern-based seams, but no system follows “strict SOLID” without trade-offs. Explain the specific boundaries and evidence rather than claiming perfection.
 
@@ -104,9 +104,10 @@ sequenceDiagram
     ID->>PG: INSERT key ON CONFLICT DO NOTHING
     S->>PR: FindAsync(product)
     PR->>PG: Read product and stock
-    S->>S: Cart.AddItem(product, quantity, policy, now)
+    S->>S: Cart.AddItem(productId, quantity, CartPolicy, now)
     U->>PG: Save cart changes and commit
-    S-->>UI: Read refreshed cart and calculate price
+    S->>S: Read cart view, then IPricingPolicy.Calculate(PricingRequest)
+    S-->>UI: CartDto with lines and PriceSummaryDto
 ```
 
 | Participant | Responsibility and scope | Implementation reference |
@@ -153,6 +154,7 @@ sequenceDiagram
         S->>OR: Add(order)
         S->>S: Clear cart
         U->>PG: Save changes and COMMIT
+        S->>S: Read back via IOrderQueries, OrderDetailsDto.From(order)
         S-->>UI: 201 Created, order details
     end
 ```
@@ -171,6 +173,50 @@ The controller is a transport adapter; the `CheckoutService` owns the use-case s
 ### 3.4 Read order history
 
 `GET /api/v1/orders` goes from `OrdersController` to `OrderService`, then `IOrderQueries` / `OrderQueries`, which filters by the current customer and reads the primary database for read-your-writes consistency. The list uses denormalized order fields; details include snapshot `order_items`. A different customer's order ID returns not found.
+
+Each response DTO has **one** mapping from the entity, next to the DTO in [OrderContracts.cs](../backend/src/IplStore.Application/Orders/OrderContracts.cs): `OrderSummaryDto.Projection` (an expression, so EF Core translates it to SQL and reads only the list columns), `OrderDetailsDto.From(order)`, `OrderLineDto.From(item)` and `PriceSummaryDto.From(price)`. [OrderQueries.cs](../backend/src/IplStore.Infrastructure/Queries/OrderQueries.cs) and the unit-test fake pass the whole object to these mappers instead of repeating field lists, so adding a field to the API touches one mapper.
+
+### 3.5 Pay for or cancel an order
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI as OrderDetailsPage
+    participant C as OrdersController
+    participant S as PaymentService
+    participant G as IPaymentGateway / FakePaymentGateway
+    participant U as EfUnitOfWork
+    participant OR as OrderRepository
+    participant PR as ProductRepository
+    participant PG as PostgreSQL
+
+    UI->>C: POST /orders/{id}/payment (simulateFailure)
+    C->>S: PayAsync(PayOrderCommand)
+    S->>S: Read order. Already Paid returns it, not Placed is 422
+    S->>G: ChargeAsync(PaymentRequest) outside any DB transaction
+    alt declined
+        G-->>S: Declined
+        S-->>UI: 422 payment.declined, order stays Placed
+    else approved
+        G-->>S: Success(transactionId)
+        S->>U: ExecuteInTransactionAsync(work)
+        U->>OR: FindForUpdateAsync(order) row lock
+        S->>S: order.MarkPaid()
+        U->>PG: COMMIT
+        S-->>UI: 200 OK, order Paid
+    end
+
+    UI->>C: POST /orders/{id}/cancel
+    C->>S: CancelAsync(customer, order)
+    S->>U: ExecuteInTransactionAsync(work)
+    U->>OR: FindForUpdateAsync(order) row lock
+    S->>S: order.Cancel() returns false if already cancelled
+    S->>PR: ReleaseStockAsync per item, sorted by product ID
+    U->>PG: COMMIT
+    S-->>UI: 200 OK, order Cancelled
+```
+
+The gateway is called outside the transaction so no row lock is held while waiting on an external system. The gateway treats the order id as its idempotency key, so a retried payment never charges twice. Cancel is the compensating action: it releases reserved stock exactly once.
 
 ## 4. Class and Interface Diagrams
 
@@ -229,11 +275,11 @@ classDiagram
         +Guid CustomerId
         +string IdempotencyKey
         +OrderStatus Status
-        +decimal Subtotal
-        +decimal Tax
-        +decimal Shipping
+        +PriceBreakdown Price
         +decimal Total
         +Place(OrderPlacement) Order
+        +MarkPaid()
+        +Cancel() bool
     }
     class OrderItem {
         +Guid ProductId
@@ -264,9 +310,21 @@ classDiagram
         <<interface>>
         +Calculate(PricingRequest) PriceBreakdown
     }
+    class StandardPricingPolicy {
+        +Calculate(PricingRequest) PriceBreakdown
+        #CalculateTax(taxableAmount, request, options) decimal
+        #CalculateShipping(subtotal, request, options) decimal
+    }
     class PricingRequest {
         <<parameter object>>
         +IReadOnlyList~PricingLine~ Lines
+    }
+    class PricingLine {
+        <<value object>>
+        +Guid ProductId
+        +decimal UnitPrice
+        +int Quantity
+        +decimal LineTotal
     }
     class PriceBreakdown {
         <<value object>>
@@ -296,7 +354,12 @@ classDiagram
     Order ..> OrderPlacement : factory input
     OrderPlacement o-- OrderLine
     OrderPlacement o-- PriceBreakdown
+    Order *-- PriceBreakdown : Price (EF complex property)
     Order --> OrderStatus
+    StandardPricingPolicy ..|> IPricingPolicy : implements
+    IPricingPolicy ..> PricingRequest : input
+    PricingRequest o-- PricingLine
+    IPricingPolicy ..> PriceBreakdown : returns
 ```
 
 | Class / contract | Responsibility and scope | Implementation reference |
@@ -306,10 +369,10 @@ classDiagram
 | `Customer` | Customer identity/profile record used by cart and order ownership. | [Customer.cs](../backend/src/IplStore.Domain/Customers/Customer.cs) |
 | `Cart` / `CartItem` | Cart aggregate owns item merge, quantity limits, remove, and clear behavior. | [Cart.cs](../backend/src/IplStore.Domain/Carts/Cart.cs), [CartItem.cs](../backend/src/IplStore.Domain/Carts/CartItem.cs) |
 | `CartPolicy` | Value object carrying configurable cart limits into aggregate operations. | [CartPolicy.cs](../backend/src/IplStore.Domain/Carts/CartPolicy.cs) |
-| `Order` / `OrderItem` | Order aggregate validates creation; items keep purchase-time snapshots. | [Order.cs](../backend/src/IplStore.Domain/Orders/Order.cs), [OrderItem.cs](../backend/src/IplStore.Domain/Orders/OrderItem.cs) |
-| `OrderPlacement`, `OrderLine`, `PriceBreakdown` | Immutable inputs/value objects used to construct and validate an order. | [OrderPlacement.cs](../backend/src/IplStore.Domain/Orders/OrderPlacement.cs), [OrderLine.cs](../backend/src/IplStore.Domain/Orders/OrderLine.cs), [PriceBreakdown.cs](../backend/src/IplStore.Domain/Orders/PriceBreakdown.cs) |
-| `IPricingPolicy`, `PricingRequest` | Application strategy contract and input object for turning pricing lines into a breakdown. | [IPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/IPricingPolicy.cs) |
-| `OrderStatus` | Persisted order lifecycle enum; `Paid` is a status value, not implemented payment processing. | [OrderStatus.cs](../backend/src/IplStore.Domain/Orders/OrderStatus.cs) |
+| `Order` / `OrderItem` | Order aggregate validates creation and the Placed → Paid / Cancelled transitions; items keep purchase-time snapshots. Holds the whole `PriceBreakdown` as one value object (plus a stored `Total` for lists and the DB check). | [Order.cs](../backend/src/IplStore.Domain/Orders/Order.cs), [OrderItem.cs](../backend/src/IplStore.Domain/Orders/OrderItem.cs) |
+| `OrderPlacement`, `OrderLine`, `PriceBreakdown` | Immutable inputs/value objects used to construct and validate an order. `PriceBreakdown` is mapped with an EF Core **complex property** to the existing `orders` columns (no extra table), so a new price component changes this record, not `Order`. | [OrderPlacement.cs](../backend/src/IplStore.Domain/Orders/OrderPlacement.cs), [OrderLine.cs](../backend/src/IplStore.Domain/Orders/OrderLine.cs), [PriceBreakdown.cs](../backend/src/IplStore.Domain/Orders/PriceBreakdown.cs), [OrderConfiguration.cs](../backend/src/IplStore.Infrastructure/Persistence/Configurations/OrderConfiguration.cs) |
+| `IPricingPolicy`, `StandardPricingPolicy`, `PricingRequest`, `PricingLine` | Application-layer Strategy (shown here because it produces the domain's `PriceBreakdown`). `StandardPricingPolicy` is the one registered implementation: subtotal of the lines, then the `CalculateTax` and `CalculateShipping` steps (`#` = protected, overridable). Cart preview and checkout both call it. | [IPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/IPricingPolicy.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs) |
+| `OrderStatus` | Persisted order lifecycle enum. `Placed`, `Paid` and `Cancelled` are used (pay / cancel); `Shipped` and `Delivered` are reserved for fulfilment, which is not implemented. | [OrderStatus.cs](../backend/src/IplStore.Domain/Orders/OrderStatus.cs) |
 
 `Cart` and `Order` are aggregate roots: callers use them to make changes rather than mutating child rows directly. The model is intentionally not a claim that every table has a matching domain aggregate; `product_catalog` is an infrastructure read model.
 
@@ -391,7 +454,22 @@ classDiagram
         <<interface>>
         TryRecordAsync(customerId, operation, key, cancellationToken)
     }
-    class StandardPricingPolicy
+    class StandardPricingPolicy {
+        +Calculate(PricingRequest) PriceBreakdown
+        #CalculateTax(taxableAmount, request, options)
+        #CalculateShipping(subtotal, request, options)
+    }
+    class IPaymentService {
+        <<interface>>
+        PayAsync(PayOrderCommand, cancellationToken)
+        CancelAsync(customerId, orderId, cancellationToken)
+    }
+    class PaymentService
+    class IPaymentGateway {
+        <<interface>>
+        ChargeAsync(PaymentRequest, cancellationToken)
+    }
+    class FakePaymentGateway
     class OrderNumberGenerator
     class EfUnitOfWork
     class CartRepository
@@ -430,6 +508,15 @@ classDiagram
     CheckoutService --> IPricingPolicy
     CheckoutService --> IOrderNumberGenerator
     StandardPricingPolicy ..|> IPricingPolicy
+    CartService --> IPricingPolicy
+    OrdersController --> IPaymentService
+    PaymentService ..|> IPaymentService
+    PaymentService --> IUnitOfWork
+    PaymentService --> IOrderRepository
+    PaymentService --> IOrderQueries
+    PaymentService --> IProductRepository
+    PaymentService --> IPaymentGateway
+    FakePaymentGateway ..|> IPaymentGateway
     EfUnitOfWork ..|> IUnitOfWork
     CartRepository ..|> ICartRepository
     ProductRepository ..|> IProductRepository
@@ -462,11 +549,14 @@ classDiagram
 | `IProductRepository` / `ProductRepository` | Product lookup and atomic stock reservation contract/adapter. | [IProductRepository.cs](../backend/src/IplStore.Application/Catalog/IProductRepository.cs), [ProductRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/ProductRepository.cs) |
 | `IOrderRepository` / `OrderRepository` | Checkout order write and idempotency lookup; order history is a separate query adapter. | [IOrderRepository.cs](../backend/src/IplStore.Application/Orders/IOrderRepository.cs), [OrderRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/OrderRepository.cs) |
 | `IOrderService` / `OrderService` | Customer-scoped order list/details use case, separate from checkout orchestration. | [OrderService.cs](../backend/src/IplStore.Application/Orders/OrderService.cs) |
+| `IPricingPolicy` / `StandardPricingPolicy` | Strategy used by both cart preview and checkout. Inside it, `Calculate` fixes the step order and rounding (Template Method); GST and shipping are `protected virtual` steps a subclass can override. | [IPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/IPricingPolicy.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs), [Application DI](../backend/src/IplStore.Application/DependencyInjection.cs) |
+| `IPaymentService` / `PaymentService` | Pays (gateway call outside any DB transaction, then mark Paid under a row lock) or cancels (releases reserved stock). | [PaymentService.cs](../backend/src/IplStore.Application/Orders/PaymentService.cs) |
+| `IPaymentGateway` / `FakePaymentGateway` | Port to the payment provider; the demo adapter is in-memory and idempotent per order. A real provider is a new adapter registered in DI. | [IPaymentGateway.cs](../backend/src/IplStore.Application/Orders/IPaymentGateway.cs), [FakePaymentGateway.cs](../backend/src/IplStore.Infrastructure/Payments/FakePaymentGateway.cs) |
 | `ICustomerRepository` / `CustomerRepository` | Looks up the customer used by cart and checkout use cases. | [ICustomerRepository.cs](../backend/src/IplStore.Application/Customers/ICustomerRepository.cs), [CustomerRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/CustomerRepository.cs) |
 | `IIdempotencyStore` / `IdempotencyStore` | Records keyed add-to-cart effects once per customer and operation. | [IIdempotencyStore.cs](../backend/src/IplStore.Application/Common/IIdempotencyStore.cs), [IdempotencyStore.cs](../backend/src/IplStore.Infrastructure/Persistence/IdempotencyStore.cs) |
 | `IOrderNumberGenerator` / `OrderNumberGenerator` | Generates a display order number; it does not own order persistence. | [IOrderNumberGenerator.cs](../backend/src/IplStore.Application/Orders/IOrderNumberGenerator.cs), [OrderNumberGenerator.cs](../backend/src/IplStore.Infrastructure/Orders/OrderNumberGenerator.cs) |
 | `ICatalogQueries`, `ICartQueries`, `IOrderQueries` | Read-side ports; separate list/detail projections from write repositories. | [ICatalogQueries.cs](../backend/src/IplStore.Application/Catalog/ICatalogQueries.cs), [ICartQueries.cs](../backend/src/IplStore.Application/Carts/ICartQueries.cs), [IOrderQueries.cs](../backend/src/IplStore.Application/Orders/IOrderQueries.cs) |
-| `CatalogQueries`, `CartQueries`, `OrderQueries` | EF query adapters; each owns the projection for its read use case. | [CatalogQueries.cs](../backend/src/IplStore.Infrastructure/Queries/CatalogQueries.cs), [CartQueries.cs](../backend/src/IplStore.Infrastructure/Queries/CartQueries.cs), [OrderQueries.cs](../backend/src/IplStore.Infrastructure/Queries/OrderQueries.cs) |
+| `CatalogQueries`, `CartQueries`, `OrderQueries` | EF query adapters; each owns the query for its read use case. `OrderQueries` uses the DTOs' own mappers (`OrderSummaryDto.Projection`, `OrderDetailsDto.From`) rather than building DTOs field by field. | [CatalogQueries.cs](../backend/src/IplStore.Infrastructure/Queries/CatalogQueries.cs), [CartQueries.cs](../backend/src/IplStore.Infrastructure/Queries/CartQueries.cs), [OrderQueries.cs](../backend/src/IplStore.Infrastructure/Queries/OrderQueries.cs), [OrderContracts.cs](../backend/src/IplStore.Application/Orders/OrderContracts.cs) |
 | `StoreDbContext` / `ReadOnlyStoreDbContext` | Maps entities/read model to PostgreSQL; optional read context disables tracking and saving. | [StoreDbContext.cs](../backend/src/IplStore.Infrastructure/Persistence/StoreDbContext.cs) |
 
 **How to read the diagram:** `..|>` means “implements”; `-->` means “uses/depends on”. `I*Repository` ports are write-side persistence contracts. `I*Queries` are read-side contracts. These are separate adapters, not “subrepositories” nested inside a repository. `StoreDbContext` points to the primary and is used for commands and read-your-writes flows. `ReadOnlyStoreDbContext` is configured to use the optional replica for catalogue reads when configured; otherwise it falls back to the primary.
@@ -493,11 +583,14 @@ flowchart LR
         NewFilter[New filter class]
         FilterPort --> ExistingFilter
         FilterPort --> NewFilter
+        PricingSteps[StandardPricingPolicy: tax / shipping steps]
+        NewTaxRule[New tax-rule subclass example]
+        PricingSteps -. override one step .-> NewTaxRule
     end
     subgraph LSP["L — Liskov Substitution"]
         PricePort[IPricingPolicy contract]
         Standard[StandardPricingPolicy]
-        Sale[SalePricingPolicy example]
+        Sale[Subclass or other policy example]
         PricePort --> Standard
         PricePort -. equivalent contract .-> Sale
     end
@@ -526,7 +619,7 @@ flowchart LR
 | Principle group | What the shown blocks own | Code references |
 |---|---|---|
 | **SRP** | Controller translates HTTP; checkout service coordinates; `Order` validates invariants; repository persists. | [OrdersController.cs](../backend/src/IplStore.Api/Controllers/OrdersController.cs), [CheckoutService.cs](../backend/src/IplStore.Application/Orders/CheckoutService.cs), [Order.cs](../backend/src/IplStore.Domain/Orders/Order.cs), [OrderRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/OrderRepository.cs) |
-| **OCP** | Existing and new catalog filters implement one filter contract; query composition consumes the collection. | [ICatalogFilter](../backend/src/IplStore.Infrastructure/Queries/CatalogFilters/ICatalogFilter.cs), [one class per filter](../backend/src/IplStore.Infrastructure/Queries/CatalogFilters/), [CatalogQueries.cs](../backend/src/IplStore.Infrastructure/Queries/CatalogQueries.cs) |
+| **OCP** | Existing and new catalog filters implement one filter contract; query composition consumes the collection. A new GST or shipping rule is a `StandardPricingPolicy` subclass that overrides one step and is registered in DI. | [ICatalogFilter](../backend/src/IplStore.Infrastructure/Queries/CatalogFilters/ICatalogFilter.cs), [one class per filter](../backend/src/IplStore.Infrastructure/Queries/CatalogFilters/), [CatalogQueries.cs](../backend/src/IplStore.Infrastructure/Queries/CatalogQueries.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs) |
 | **LSP** | Pricing implementations must honor the same valid-input and price-breakdown contract. | [IPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/IPricingPolicy.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs) |
 | **ISP** | Order writes and order-history reads use distinct ports and adapters. | [IOrderRepository.cs](../backend/src/IplStore.Application/Orders/IOrderRepository.cs), [IOrderQueries.cs](../backend/src/IplStore.Application/Orders/IOrderQueries.cs), [OrderRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/OrderRepository.cs), [OrderQueries.cs](../backend/src/IplStore.Infrastructure/Queries/OrderQueries.cs) |
 | **DIP** | Application use cases depend on application-owned abstractions; Infrastructure supplies implementations via DI. | [CheckoutService.cs](../backend/src/IplStore.Application/Orders/CheckoutService.cs), [Application DI](../backend/src/IplStore.Application/DependencyInjection.cs), [Infrastructure DI](../backend/src/IplStore.Infrastructure/DependencyInjection.cs), [CompositionRoot.cs](../backend/src/IplStore.Api/Composition/CompositionRoot.cs) |
@@ -534,7 +627,7 @@ flowchart LR
 | Principle | Evidence in this codebase | What not to overclaim |
 |---|---|---|
 | **S** | Controllers translate HTTP; services coordinate use cases; aggregates enforce rules; repositories persist; pricing policy calculates prices. | A class can still grow too large. Review responsibilities as features are added. |
-| **O** | Add an `ICatalogFilter` implementation and register it; add a new pricing implementation behind `IPricingPolicy`. | OCP is not “never edit any existing file.” Registration, mapping, and tests may need changes. |
+| **O** | Add an `ICatalogFilter` implementation and register it; override `CalculateTax` / `CalculateShipping` in a `StandardPricingPolicy` subclass, or add a whole new `IPricingPolicy`. | OCP is not “never edit any existing file.” Registration, mapping, and tests may need changes. |
 | **L** | Implementations must honor the port contract. A pricing policy must return valid, internally consistent totals; a repository must preserve the transaction/locking semantics its use case relies on. | Implementing the same interface is insufficient if behavior differs. Contract tests are useful. |
 | **I** | Read query ports and write repository ports are separate. Consumers depend on smaller interfaces than a single all-purpose data service. | Keep interfaces cohesive; don’t create one-interface-per-method without a reason. |
 | **D** | Application defines ports; Infrastructure implements them; the composition root chooses concrete classes through DI. | The API composition root still depends on concrete projects to wire the application. That is intentional. |
@@ -542,6 +635,8 @@ flowchart LR
 ### Composition over inheritance
 
 Variable behavior is primarily composed through injected interfaces: `CheckoutService` receives `IPricingPolicy`, repositories, and `IUnitOfWork`. That lets behavior vary without subclassing the checkout service. The project still uses inheritance where it fits a framework/type relationship, such as exception types and the specialized read-only DbContext. The goal is to avoid inheritance as the default extension mechanism, not to ban it absolutely.
+
+One deliberate use of inheritance is **inside** the pricing strategy: `StandardPricingPolicy` is a Template Method. Its steps are not independent — GST is charged on the amount after any adjustment, and rounding must happen once — so `Calculate` owns the order and rounding and a subclass overrides one step. Callers still depend only on `IPricingPolicy` (composition). If several rules of one kind had to be combined (GST by category **and** regional shipping **and** stacked offers), the next step would be composed step strategies (`ITaxPolicy`, `IShippingPolicy`, ...); that is not built because the brief does not need it.
 
 ## 6. Patterns in Use
 
@@ -553,6 +648,10 @@ Variable behavior is primarily composed through injected interfaces: `CheckoutSe
 | Aggregate Root / DDD | `Cart`, `Order` | Business invariants are enforced at domain entry points. |
 | Factory Method | `Order.Place(OrderPlacement)` | An order is created only after validating its invariants. |
 | Strategy | `IPricingPolicy` / `StandardPricingPolicy` | Pricing algorithm can change without changing callers. |
+| Template Method | `StandardPricingPolicy.Calculate` with `protected virtual` `CalculateTax` / `CalculateShipping` | A new tax or shipping rule overrides one step; order of steps and rounding stay in one place. |
+| Value Object | `PriceBreakdown`, `CartPolicy`, `OrderLine` | The price travels as one object from policy → order → API; `PriceBreakdown` is stored with an EF Core complex property. |
+| Mapper / Projection | `OrderSummaryDto.Projection`, `OrderDetailsDto.From`, `OrderLineDto.From`, `PriceSummaryDto.From` | One mapping per DTO; the list projection is an expression so EF still selects only its columns. |
+| Ports and Adapters for external systems | `IPaymentGateway` / `FakePaymentGateway` | A real provider replaces the fake in DI; the use case does not change. |
 | Specification / Filter Pipeline | `ICatalogFilter` implementations | New independent search criteria can be added as filters. |
 | Parameter Object | `SearchProductsQuery`, `PlaceOrderCommand`, `OrderPlacement`, `PricingRequest` | Related input travels as one named object instead of continually expanding method signatures. |
 | CQRS-lite | command repositories vs read query ports; write tables vs `product_catalog` | Reads can use a denormalized projection and optional replica while writes preserve normalized truth. |
@@ -560,7 +659,7 @@ Variable behavior is primarily composed through injected interfaces: `CheckoutSe
 | Idempotent Receiver | order key and `idempotency_keys` table | Repeated client commands don’t repeat the database effect. |
 | Composition Root / Dependency Injection | `CompositionRoot` and DI extensions | Concrete choices and lifetimes are centralized. |
 
-Not currently used: gRPC/RPC between services, microservices, event broker, transactional outbox, payment gateway. Don’t describe these as existing patterns.
+Not currently used: gRPC/RPC between services, microservices, event broker, transactional outbox, a real payment provider (only the fake gateway exists). Don’t describe these as existing patterns.
 
 ## 7. Database ER Diagram
 
@@ -599,7 +698,7 @@ erDiagram
         bool is_active
     }
     PRODUCT_CATALOG {
-        uuid product_id PK_FK
+        uuid product_id PK, FK
         varchar sku
         numeric price
         int stock_quantity
@@ -609,17 +708,17 @@ erDiagram
     }
     CUSTOMERS {
         uuid id PK
-        varchar email UK_case_insensitive
+        varchar email UK "case-insensitive"
         varchar full_name
     }
     CARTS {
         uuid id PK
-        uuid customer_id FK_UK
+        uuid customer_id FK, UK
     }
     CART_ITEMS {
         uuid id PK
         uuid cart_id FK
-        uuid customer_id denormalized
+        uuid customer_id "denormalised distribution key"
         uuid product_id FK
         int quantity
     }
@@ -627,8 +726,9 @@ erDiagram
         uuid id PK
         varchar order_number UK
         uuid customer_id FK
-        varchar idempotency_key UK_with_customer
+        varchar idempotency_key "UNIQUE with customer_id"
         varchar status
+        char currency
         numeric subtotal
         numeric tax
         numeric shipping
@@ -638,18 +738,18 @@ erDiagram
     ORDER_ITEMS {
         uuid id PK
         uuid order_id FK
-        uuid customer_id denormalized
-        uuid product_id snapshot_no_FK
-        varchar sku_snapshot
-        varchar product_name_snapshot
-        numeric unit_price_snapshot
+        uuid customer_id "denormalised distribution key"
+        uuid product_id "snapshot, no FK"
+        varchar sku "snapshot"
+        varchar product_name "snapshot"
+        numeric unit_price "snapshot"
         int quantity
         numeric line_total
     }
     IDEMPOTENCY_KEYS {
-        uuid customer_id PK_FK_part
-        varchar operation PK_part
-        varchar idempotency_key PK_part
+        uuid customer_id PK, FK
+        varchar operation PK
+        varchar idempotency_key PK
         timestamptz created_at
     }
 ```
@@ -684,6 +784,9 @@ flowchart TB
     Root[CompositionRoot] --> AppDI[Application DI]
     Root --> InfraDI[Infrastructure DI]
     AppDI -->|ICheckoutService| Checkout[CheckoutService]
+    AppDI -->|IPaymentService| Payment[PaymentService]
+    AppDI -->|IPricingPolicy singleton| Pricing[StandardPricingPolicy]
+    InfraDI -->|IPaymentGateway singleton| Gateway[FakePaymentGateway]
     InfraDI -->|IUnitOfWork| Uow[EfUnitOfWork]
     InfraDI -->|ICartRepository| CartRepo[CartRepository]
     InfraDI -->|IProductRepository| ProductRepo[ProductRepository]
@@ -726,7 +829,11 @@ The SQL migrations, not EF migrations, own the schema. EF Core maps the schema t
 
 ### Change pricing behavior
 
-For a global policy change, implement `IPricingPolicy` and select it in the Application DI registration. Existing cart and checkout callers still call `Calculate(PricingRequest)`.
+For a change to one rule (e.g. GST by category, region-based shipping), subclass `StandardPricingPolicy`, override `CalculateTax` or `CalculateShipping`, and register the subclass in [Application DI](../backend/src/IplStore.Application/DependencyInjection.cs). `StandardPricingPolicy` itself does not change; steps return unrounded amounts and the base class rounds once. If the rule needs more input (a category per line, a delivery region), add a property to `PricingRequest` / `PricingLine` — the step signatures take the whole request, so they do not change.
+
+For a completely different algorithm, implement `IPricingPolicy` directly and register it instead. Either way, existing cart and checkout callers still call `Calculate(PricingRequest)`.
+
+A new price **component** (for example a discount) is different: it changes the money model. Expect to touch `PriceBreakdown`, one step in `StandardPricingPolicy` (applied before tax), one line in the `ComplexProperty` mapping, a migration, `PriceSummaryDto` and the UI. `Order`, the queries, checkout and cart code do not change because the price travels as one `PriceBreakdown`.
 
 For different policies by customer, currency, or promotion, simply registering another implementation is not enough: inject a resolver/factory or a policy collection keyed by explicit criteria, then select the policy in the application layer. Add tests for the old and new cases. Keep cart preview and checkout on the same pricing decision so displayed totals match checkout.
 
@@ -736,9 +843,13 @@ The property-based `SearchProductsQuery` is already a good parameter object: add
 
 Important compatibility nuance: a parameter object does not make changes automatically non-breaking. `PlaceOrderCommand` and `OrderPlacement` are positional records; adding a positional constructor parameter breaks constructor call sites. For frequently evolving commands, prefer property-based objects with optional defaults, or add a new command/API version when the external contract must break. Do not turn one request into an unbounded “bag of everything”; keep it cohesive.
 
-### Add payment or another external service
+### Add a field to an order
 
-There is no existing payment interface to plug into. Add an application-owned payment port such as `IPaymentGateway`, a provider adapter in Infrastructure, and a workflow that models pending/authorized/failed states. Do not make a network call while a PostgreSQL transaction or cart lock is open. For reliable post-commit messages, use an outbox and asynchronous worker. A payment webhook must be authenticated and deduplicated by provider event ID. Add a compensation/stock-release policy for payment failure.
+Add it to `Order` (and to `OrderPlacement` if checkout sets it), map the column in `OrderConfiguration` with a migration, and — only if the API should expose it — add it to the DTO and its single `From` / `Projection` mapper in `OrderContracts.cs`. `OrderQueries`, the test fake and the controllers pass whole objects to those mappers, so they do not change.
+
+### Replace the fake payment provider
+
+`IPaymentGateway` already exists and `PaymentService` calls it **outside** any database transaction. A real provider is a new Infrastructure adapter registered in DI instead of `FakePaymentGateway`; it must treat the order id as the provider idempotency key. Still missing for production: a persisted payment attempt, an authenticated webhook deduplicated by provider event id, and refund handling for an order cancelled while a charge was in flight (today that is only logged). For reliable post-commit messages, use an outbox and asynchronous worker.
 
 ### Replace demo identity
 
@@ -747,6 +858,8 @@ The API already depends on `ICurrentCustomerAccessor`; add a claims-based implem
 ## 10. Liskov, DI, and Contract Safety
 
 To substitute one `IPricingPolicy` for another, the new one must preserve the observable contract: accept the same valid request shapes, return a valid `PriceBreakdown`, keep `Total = Subtotal + Tax + Shipping`, use the documented currency/rounding rules, and fail with documented validation behavior. A class compiling against the interface is not enough to prove LSP; test shared invariants against every implementation.
+
+A `StandardPricingPolicy` subclass inherits most of this for free: `Calculate` (not virtual) still computes the subtotal, rounds every step once and builds the `PriceBreakdown`, so `Total` stays consistent. The subclass is only responsible for its step returning a sensible non-negative amount.
 
 For repositories, preserve behavior callers rely on: cancellation, transaction participation, customer scoping, ordering/paging guarantees, and locking where the port requires it. `ICartRepository.GetOrCreateForUpdateAsync` explicitly must run inside a unit-of-work transaction. A fake that ignores locking may be suitable for ordinary use-case tests but cannot prove PostgreSQL concurrency behavior; integration tests are needed for that.
 
@@ -766,7 +879,7 @@ DI lifetime is part of correctness. `DbContext` and the repositories using it ar
 | A product is renamed after purchase | Order item snapshot retains purchased name/SKU/price; history is not rebuilt from current catalogue. | order-item schema and order details query |
 | Read replica is behind after checkout | Order history reads the primary for read-your-writes; catalogue is suitable for replica reads. | `IOrderQueries` and `ICatalogQueries` comments/registrations |
 | Search input is invalid or huge | Application validates search length, ranges, sorts, filter counts, and page bounds; API returns structured errors. | `CatalogService.BuildCriteria`, catalog tests |
-| A payment provider times out | Not implemented. Design a provider idempotency key, persisted payment attempt, verified webhook, and reconciliation path before claiming payment resilience. | State as a future feature |
+| A payment provider times out | Only the fake gateway exists. The design already calls the gateway outside the DB transaction and passes the order id as the idempotency key, and a declined payment leaves the order `Placed` (retry or cancel). Still needed for a real provider: persisted payment attempts, a verified webhook, and a reconciliation/refund path. | [PaymentService.cs](../backend/src/IplStore.Application/Orders/PaymentService.cs), [IPaymentGateway.cs](../backend/src/IplStore.Application/Orders/IPaymentGateway.cs) |
 | Poison message repeatedly fails | No broker or DLQ exists yet. With Service Bus, bound delivery attempts, dead-letter, alert, inspect, then replay idempotently. | State as future infrastructure |
 
 “Exactly-once” should be phrased as **exactly-once database effect under at-least-once request delivery**, within the idempotency-key scope and retention policy. It is not a blanket guarantee across external systems that do not share the PostgreSQL transaction.
@@ -807,6 +920,10 @@ For any requested change, answer these before typing:
 
 **Why object parameters?** They group cohesive inputs and reduce method-signature churn. Property-based objects can add optional fields compatibly; positional record changes can still break callers. A parameter object is not a replacement for API versioning or careful validation.
 
+**Why pass whole objects inside, but DTOs at the API?** Inside the backend the price travels as one `PriceBreakdown` and queries hand the whole `Order` to one mapper per DTO, so a new field does not ripple through every caller. At the API boundary the DTO stays a separate, deliberate contract: returning the entity would leak internals (idempotency key, e-mail) and let any domain refactor silently change the JSON. Deliberate exception: `PaymentRequest` carries only what an external provider needs (least knowledge).
+
+**Why Template Method for pricing, not more interfaces?** The brief has one pricing rule set (GST + shipping). Making those two steps overridable gives an extension point for exactly what exists, keeps rounding and step order in one place, and avoids speculative abstractions (no discount hook, no per-rule interfaces) for features nobody asked for.
+
 **Why interfaces?** To define an inward-facing contract and make implementations replaceable/testable. Avoid adding an interface when there is no meaningful boundary or substitution/testing need.
 
 **Can you guarantee no regression?** No change can be promised regression-free. Reduce risk with a narrow change, preserve invariants and contracts, add focused unit/integration tests, run relevant gates, and use backward-compatible migrations/API changes.
@@ -819,6 +936,9 @@ For any requested change, answer these before typing:
 | Browse flow | `Api/Controllers/ProductsController.cs`, `Application/Catalog/CatalogService.cs`, `Infrastructure/Queries/CatalogQueries.cs` |
 | Cart flow | `Api/Controllers/CartController.cs`, `Application/Carts/CartService.cs`, `Domain/Carts/Cart.cs`, `Infrastructure/Repositories/CartRepository.cs` |
 | Checkout flow | `Api/Controllers/OrdersController.cs`, `Application/Orders/CheckoutService.cs`, `Domain/Orders/Order.cs` |
+| Pricing | `Application/Pricing/StandardPricingPolicy.cs`, `Domain/Orders/PriceBreakdown.cs`, `Application/DependencyInjection.cs` |
+| Order responses (DTO mapping) | `Application/Orders/OrderContracts.cs`, `Infrastructure/Queries/OrderQueries.cs`, `Infrastructure/Persistence/Configurations/OrderConfiguration.cs` |
+| Payment / cancel | `Application/Orders/PaymentService.cs`, `Application/Orders/IPaymentGateway.cs`, `Infrastructure/Payments/FakePaymentGateway.cs` |
 | Database transaction and stock | `Infrastructure/Persistence/EfUnitOfWork.cs`, `Infrastructure/Repositories/ProductRepository.cs` |
 | Schema and ERD source | `database/migrations/V001__write_model.sql` through `V004__idempotency_keys.sql`, `V002__catalog_read_model.sql` |
 | Tests | `backend/tests/IplStore.UnitTests`, `backend/tests/IplStore.IntegrationTests/Api/ConcurrencyTests.cs` |

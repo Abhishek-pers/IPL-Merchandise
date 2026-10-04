@@ -192,7 +192,7 @@ Catalogue reads (more than 95% of traffic) go to **one flat, pre-joined table**,
 | [09 Review guide](docs/09-review-guide.md) | Walkthrough order, trade-offs, likely questions |
 | [10 Design document](docs/10-design-document.md) | **Everything in one place: code flow, sequence diagrams, DB, trade-offs and a demo playbook** |
 | [11 Denormalised tables](docs/11-denormalised-tables.md) | `product_catalog` read model column by column, sync triggers, indexes, order snapshots, trade-offs |
-| [12 Interview design guide](docs/12-interview-design-guide.md) | End-to-end user flows, UML classes/interfaces, database ERD, SOLID/pattern evidence, extension strategy, failure cases, and panel walkthrough |
+| [12 Design guide](docs/12-design-guide.md) | End-to-end user flows, UML classes/interfaces, database ERD, SOLID/pattern evidence, extension strategy, failure cases, and panel walkthrough |
 | [ADRs](docs/adr) | Why each key decision was made |
 
 ## 6. Tunable parameters (no code changes)
