@@ -29,7 +29,7 @@ public sealed class OrderTests
         var order = Order.Place(Placement(lines));
 
         order.Status.Should().Be(OrderStatus.Placed);
-        order.Subtotal.Should().Be(250m);
+        order.Price.Subtotal.Should().Be(250m);
         order.Total.Should().Be(250m + 36m + 99m);
         order.ItemCount.Should().Be(3);
         order.Items.Should().HaveCount(2)

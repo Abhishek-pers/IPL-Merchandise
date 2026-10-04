@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using IplStore.Domain.Orders;
 
 namespace IplStore.Application.Orders;
@@ -28,7 +29,19 @@ public sealed record OrderSummaryDto(
     DateTimeOffset PlacedAt,
     int ItemCount,
     decimal Total,
-    string Currency);
+    string Currency)
+{
+    /// <summary>
+    /// The ONE mapping from an order to a list row. An expression (not a method) so EF Core
+    /// translates it to SQL and reads only these columns; in-memory callers use <see cref="From"/>.
+    /// </summary>
+    public static readonly Expression<Func<Order, OrderSummaryDto>> Projection =
+        o => new OrderSummaryDto(o.Id, o.OrderNumber, o.Status, o.PlacedAt, o.ItemCount, o.Total, o.Price.Currency);
+
+    private static readonly Func<Order, OrderSummaryDto> Compiled = Projection.Compile();
+
+    public static OrderSummaryDto From(Order order) => Compiled(order);
+}
 
 public sealed record OrderLineDto(
     Guid ProductId,
@@ -38,7 +51,15 @@ public sealed record OrderLineDto(
     string CategoryName,
     decimal UnitPrice,
     int Quantity,
-    decimal LineTotal);
+    decimal LineTotal)
+{
+    public static OrderLineDto From(OrderItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return new OrderLineDto(
+            item.ProductId, item.Sku, item.ProductName, item.FranchiseName, item.CategoryName, item.UnitPrice, item.Quantity, item.LineTotal);
+    }
+}
 
 public sealed record OrderDetailsDto(
     Guid Id,
@@ -47,7 +68,22 @@ public sealed record OrderDetailsDto(
     DateTimeOffset PlacedAt,
     int ItemCount,
     PriceSummaryDto Price,
-    IReadOnlyList<OrderLineDto> Lines);
+    IReadOnlyList<OrderLineDto> Lines)
+{
+    /// <summary>The ONE mapping from an order (with its items loaded) to the details response.</summary>
+    public static OrderDetailsDto From(Order order)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+        return new OrderDetailsDto(
+            order.Id,
+            order.OrderNumber,
+            order.Status,
+            order.PlacedAt,
+            order.ItemCount,
+            PriceSummaryDto.From(order.Price),
+            order.Items.OrderBy(i => i.ProductName, StringComparer.Ordinal).Select(OrderLineDto.From).ToList());
+    }
+}
 
 /// <summary>
 /// Result of a checkout. <see cref="IsReplay"/> is true when the idempotency key had already

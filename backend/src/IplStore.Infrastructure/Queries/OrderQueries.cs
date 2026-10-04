@@ -28,7 +28,7 @@ internal sealed class OrderQueries : IOrderQueries
             .ThenByDescending(o => o.Id)
             .Skip(page.Offset)
             .Take(page.PageSize)
-            .Select(o => new OrderSummaryDto(o.Id, o.OrderNumber, o.Status, o.PlacedAt, o.ItemCount, o.Total, o.Currency))
+            .Select(OrderSummaryDto.Projection)
             .ToListAsync(cancellationToken);
 
         return new PagedResult<OrderSummaryDto>(items, page.Page, page.PageSize, totalCount);
@@ -41,23 +41,6 @@ internal sealed class OrderQueries : IOrderQueries
             .Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == orderId && o.CustomerId == customerId, cancellationToken);
 
-        if (order is null)
-        {
-            return null;
-        }
-
-        var lines = order.Items
-            .OrderBy(i => i.ProductName, StringComparer.Ordinal)
-            .Select(i => new OrderLineDto(i.ProductId, i.Sku, i.ProductName, i.FranchiseName, i.CategoryName, i.UnitPrice, i.Quantity, i.LineTotal))
-            .ToList();
-
-        return new OrderDetailsDto(
-            order.Id,
-            order.OrderNumber,
-            order.Status,
-            order.PlacedAt,
-            order.ItemCount,
-            new PriceSummaryDto(order.Subtotal, order.Tax, order.Shipping, order.Total, order.Currency),
-            lines);
+        return order is null ? null : OrderDetailsDto.From(order);
     }
 }

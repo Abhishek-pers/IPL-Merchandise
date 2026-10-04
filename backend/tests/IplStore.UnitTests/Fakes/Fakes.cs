@@ -209,7 +209,7 @@ public sealed class FakeOrderQueries : IOrderQueries
     {
         var all = _store.Orders.Where(o => o.CustomerId == customerId).OrderByDescending(o => o.PlacedAt).ToList();
         var items = all.Skip(page.Offset).Take(page.PageSize)
-            .Select(o => new OrderSummaryDto(o.Id, o.OrderNumber, o.Status, o.PlacedAt, o.ItemCount, o.Total, o.Currency))
+            .Select(OrderSummaryDto.From)
             .ToList();
         return Task.FromResult(new PagedResult<OrderSummaryDto>(items, page.Page, page.PageSize, all.Count));
     }
@@ -217,17 +217,7 @@ public sealed class FakeOrderQueries : IOrderQueries
     public Task<OrderDetailsDto?> GetAsync(Guid customerId, Guid orderId, CancellationToken cancellationToken)
     {
         var o = _store.Orders.FirstOrDefault(x => x.Id == orderId && x.CustomerId == customerId);
-        if (o is null)
-        {
-            return Task.FromResult<OrderDetailsDto?>(null);
-        }
-
-        var lines = o.Items
-            .Select(i => new OrderLineDto(i.ProductId, i.Sku, i.ProductName, i.FranchiseName, i.CategoryName, i.UnitPrice, i.Quantity, i.LineTotal))
-            .ToList();
-        return Task.FromResult<OrderDetailsDto?>(new OrderDetailsDto(
-            o.Id, o.OrderNumber, o.Status, o.PlacedAt, o.ItemCount,
-            new PriceSummaryDto(o.Subtotal, o.Tax, o.Shipping, o.Total, o.Currency), lines));
+        return Task.FromResult<OrderDetailsDto?>(o is null ? null : OrderDetailsDto.From(o));
     }
 }
 

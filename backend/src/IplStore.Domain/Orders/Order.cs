@@ -26,14 +26,13 @@ public sealed class Order
 
     public OrderStatus Status { get; private set; }
 
-    public string Currency { get; private set; } = string.Empty;
+    /// <summary>
+    /// The priced breakdown as ONE value object, snapshotted at placement. Adding a price
+    /// component (e.g. a discount) changes <see cref="PriceBreakdown"/> only, not this class.
+    /// </summary>
+    public PriceBreakdown Price { get; private set; } = null!;
 
-    public decimal Subtotal { get; private set; }
-
-    public decimal Tax { get; private set; }
-
-    public decimal Shipping { get; private set; }
-
+    /// <summary>Denormalised <see cref="PriceBreakdown.Total"/>: stored so lists and the DB check need no recomputation.</summary>
     public decimal Total { get; private set; }
 
     /// <summary>Denormalised total units, so the order-history list needs no join.</summary>
@@ -87,10 +86,7 @@ public sealed class Order
             CustomerId = placement.CustomerId,
             IdempotencyKey = placement.IdempotencyKey,
             Status = OrderStatus.Placed,
-            Currency = placement.Price.Currency,
-            Subtotal = placement.Price.Subtotal,
-            Tax = placement.Price.Tax,
-            Shipping = placement.Price.Shipping,
+            Price = placement.Price,
             Total = placement.Price.Total,
             ItemCount = placement.Lines.Sum(l => l.Quantity),
             CustomerName = placement.CustomerName,
