@@ -4,15 +4,20 @@ using Microsoft.Extensions.Options;
 namespace IplStore.Application.Pricing;
 
 /// <summary>
-/// Default policy: subtotal + GST on the subtotal + flat shipping below a free-shipping
+/// Default strategy: subtotal + GST on the subtotal + flat shipping below a free-shipping
 /// threshold. Money is rounded to 2 decimals, half away from zero (commercial rounding).
+/// <para>
+/// Lowest <see cref="Priority"/> and always applies, so <see cref="PricingPolicySelector"/> falls
+/// back to it when no other registered strategy applies.
+/// </para>
 /// <para>
 /// Template Method: <see cref="Calculate"/> fixes the ORDER of the steps and the rounding; each
 /// rule is a protected virtual step. A new rule (e.g. GST by category) is a subclass that
-/// overrides one step, registered in DI instead of this class - this class does not change.
+/// overrides one step (and <see cref="Priority"/> / <see cref="AppliesTo"/>), registered in DI -
+/// this class does not change.
 /// </para>
 /// </summary>
-public class StandardPricingPolicy : IPricingPolicy
+public class StandardPricingPolicy : IPricingStrategy
 {
     private readonly IOptionsMonitor<PricingOptions> _options;
 
@@ -20,6 +25,12 @@ public class StandardPricingPolicy : IPricingPolicy
     {
         _options = options;
     }
+
+    /// <summary>Lowest priority: the fallback when no other strategy applies.</summary>
+    public virtual int Priority => 0;
+
+    /// <summary>Always applies, so the selector always finds a strategy.</summary>
+    public virtual bool AppliesTo(PricingRequest request) => true;
 
     public PriceBreakdown Calculate(PricingRequest request)
     {

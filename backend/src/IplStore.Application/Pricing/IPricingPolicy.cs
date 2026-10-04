@@ -15,9 +15,9 @@ public sealed record PricingLine(Guid ProductId, decimal UnitPrice, int Quantity
 public sealed record PricingRequest(IReadOnlyList<PricingLine> Lines);
 
 /// <summary>
-/// Strategy pattern: how a basket is turned into money. The cart preview and checkout both
-/// use the same policy, so the customer is never shown a price that checkout won't honour.
-/// Swap the implementation in DI (e.g. a festive-sale policy) without touching callers.
+/// What cart and checkout depend on: how a basket is turned into money. Both use the same
+/// instance, so the customer is never shown a price that checkout won't honour. In DI this is
+/// <see cref="PricingPolicySelector"/>, which delegates to the best <see cref="IPricingStrategy"/>.
 /// </summary>
 public interface IPricingPolicy
 {

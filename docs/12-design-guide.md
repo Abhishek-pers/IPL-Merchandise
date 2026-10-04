@@ -310,7 +310,18 @@ classDiagram
         <<interface>>
         +Calculate(PricingRequest) PriceBreakdown
     }
+    class IPricingStrategy {
+        <<interface>>
+        +int Priority
+        +AppliesTo(PricingRequest) bool
+    }
+    class PricingPolicySelector {
+        <<strategy context>>
+        +Calculate(PricingRequest) PriceBreakdown
+    }
     class StandardPricingPolicy {
+        +int Priority = 0
+        +AppliesTo(PricingRequest) bool = true
         +Calculate(PricingRequest) PriceBreakdown
         #CalculateTax(taxableAmount, request, options) decimal
         #CalculateShipping(subtotal, request, options) decimal
@@ -356,7 +367,10 @@ classDiagram
     OrderPlacement o-- PriceBreakdown
     Order *-- PriceBreakdown : Price (EF complex property)
     Order --> OrderStatus
-    StandardPricingPolicy ..|> IPricingPolicy : implements
+    IPricingStrategy --|> IPricingPolicy : extends
+    StandardPricingPolicy ..|> IPricingStrategy : implements
+    PricingPolicySelector ..|> IPricingPolicy : implements
+    PricingPolicySelector o-- "1..*" IPricingStrategy : picks highest priority that applies
     IPricingPolicy ..> PricingRequest : input
     PricingRequest o-- PricingLine
     IPricingPolicy ..> PriceBreakdown : returns
@@ -371,7 +385,7 @@ classDiagram
 | `CartPolicy` | Value object carrying configurable cart limits into aggregate operations. | [CartPolicy.cs](../backend/src/IplStore.Domain/Carts/CartPolicy.cs) |
 | `Order` / `OrderItem` | Order aggregate validates creation and the Placed → Paid / Cancelled transitions; items keep purchase-time snapshots. Holds the whole `PriceBreakdown` as one value object (plus a stored `Total` for lists and the DB check). | [Order.cs](../backend/src/IplStore.Domain/Orders/Order.cs), [OrderItem.cs](../backend/src/IplStore.Domain/Orders/OrderItem.cs) |
 | `OrderPlacement`, `OrderLine`, `PriceBreakdown` | Immutable inputs/value objects used to construct and validate an order. `PriceBreakdown` is mapped with an EF Core **complex property** to the existing `orders` columns (no extra table), so a new price component changes this record, not `Order`. | [OrderPlacement.cs](../backend/src/IplStore.Domain/Orders/OrderPlacement.cs), [OrderLine.cs](../backend/src/IplStore.Domain/Orders/OrderLine.cs), [PriceBreakdown.cs](../backend/src/IplStore.Domain/Orders/PriceBreakdown.cs), [OrderConfiguration.cs](../backend/src/IplStore.Infrastructure/Persistence/Configurations/OrderConfiguration.cs) |
-| `IPricingPolicy`, `StandardPricingPolicy`, `PricingRequest`, `PricingLine` | Application-layer Strategy (shown here because it produces the domain's `PriceBreakdown`). `StandardPricingPolicy` is the one registered implementation: subtotal of the lines, then the `CalculateTax` and `CalculateShipping` steps (`#` = protected, overridable). Cart preview and checkout both call it. | [IPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/IPricingPolicy.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs) |
+| `IPricingPolicy`, `IPricingStrategy`, `PricingPolicySelector`, `StandardPricingPolicy`, `PricingRequest`, `PricingLine` | Application-layer Strategy (shown here because it produces the domain's `PriceBreakdown`). Any number of `IPricingStrategy` classes can be registered; each declares a `Priority` and when it `AppliesTo` a request. `PricingPolicySelector` is the `IPricingPolicy` that cart and checkout receive: it prices each request with the highest-priority strategy that applies. `StandardPricingPolicy` is the only strategy today (priority 0, always applies, so it is the fallback): subtotal, then the `CalculateTax` and `CalculateShipping` steps (`#` = protected, overridable). | [IPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/IPricingPolicy.cs), [IPricingStrategy.cs](../backend/src/IplStore.Application/Pricing/IPricingStrategy.cs), [PricingPolicySelector.cs](../backend/src/IplStore.Application/Pricing/PricingPolicySelector.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs) |
 | `OrderStatus` | Persisted order lifecycle enum. `Placed`, `Paid` and `Cancelled` are used (pay / cancel); `Shipped` and `Delivered` are reserved for fulfilment, which is not implemented. | [OrderStatus.cs](../backend/src/IplStore.Domain/Orders/OrderStatus.cs) |
 
 `Cart` and `Order` are aggregate roots: callers use them to make changes rather than mutating child rows directly. The model is intentionally not a claim that every table has a matching domain aggregate; `product_catalog` is an infrastructure read model.
@@ -454,6 +468,14 @@ classDiagram
         <<interface>>
         TryRecordAsync(customerId, operation, key, cancellationToken)
     }
+    class IPricingStrategy {
+        <<interface>>
+        Priority
+        AppliesTo(PricingRequest)
+    }
+    class PricingPolicySelector {
+        Calculate(PricingRequest)
+    }
     class StandardPricingPolicy {
         +Calculate(PricingRequest) PriceBreakdown
         #CalculateTax(taxableAmount, request, options)
@@ -507,7 +529,9 @@ classDiagram
     CheckoutService --> IOrderQueries
     CheckoutService --> IPricingPolicy
     CheckoutService --> IOrderNumberGenerator
-    StandardPricingPolicy ..|> IPricingPolicy
+    PricingPolicySelector ..|> IPricingPolicy
+    PricingPolicySelector --> IPricingStrategy
+    StandardPricingPolicy ..|> IPricingStrategy
     CartService --> IPricingPolicy
     OrdersController --> IPaymentService
     PaymentService ..|> IPaymentService
@@ -549,7 +573,8 @@ classDiagram
 | `IProductRepository` / `ProductRepository` | Product lookup and atomic stock reservation contract/adapter. | [IProductRepository.cs](../backend/src/IplStore.Application/Catalog/IProductRepository.cs), [ProductRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/ProductRepository.cs) |
 | `IOrderRepository` / `OrderRepository` | Checkout order write and idempotency lookup; order history is a separate query adapter. | [IOrderRepository.cs](../backend/src/IplStore.Application/Orders/IOrderRepository.cs), [OrderRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/OrderRepository.cs) |
 | `IOrderService` / `OrderService` | Customer-scoped order list/details use case, separate from checkout orchestration. | [OrderService.cs](../backend/src/IplStore.Application/Orders/OrderService.cs) |
-| `IPricingPolicy` / `StandardPricingPolicy` | Strategy used by both cart preview and checkout. Inside it, `Calculate` fixes the step order and rounding (Template Method); GST and shipping are `protected virtual` steps a subclass can override. | [IPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/IPricingPolicy.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs), [Application DI](../backend/src/IplStore.Application/DependencyInjection.cs) |
+| `IPricingPolicy` / `PricingPolicySelector` | What cart preview and checkout depend on. The selector receives every registered `IPricingStrategy` and prices each request with the highest-priority one that applies, so preview and checkout always make the same choice. | [IPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/IPricingPolicy.cs), [PricingPolicySelector.cs](../backend/src/IplStore.Application/Pricing/PricingPolicySelector.cs) |
+| `IPricingStrategy` / `StandardPricingPolicy` | One interchangeable strategy, registered with `AddPricingStrategy<T>()`. `StandardPricingPolicy` is the fallback (priority 0, always applies); inside it `Calculate` fixes step order and rounding (Template Method) and GST / shipping are `protected virtual` steps. | [IPricingStrategy.cs](../backend/src/IplStore.Application/Pricing/IPricingStrategy.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs), [Application DI](../backend/src/IplStore.Application/DependencyInjection.cs) |
 | `IPaymentService` / `PaymentService` | Pays (gateway call outside any DB transaction, then mark Paid under a row lock) or cancels (releases reserved stock). | [PaymentService.cs](../backend/src/IplStore.Application/Orders/PaymentService.cs) |
 | `IPaymentGateway` / `FakePaymentGateway` | Port to the payment provider; the demo adapter is in-memory and idempotent per order. A real provider is a new adapter registered in DI. | [IPaymentGateway.cs](../backend/src/IplStore.Application/Orders/IPaymentGateway.cs), [FakePaymentGateway.cs](../backend/src/IplStore.Infrastructure/Payments/FakePaymentGateway.cs) |
 | `ICustomerRepository` / `CustomerRepository` | Looks up the customer used by cart and checkout use cases. | [ICustomerRepository.cs](../backend/src/IplStore.Application/Customers/ICustomerRepository.cs), [CustomerRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/CustomerRepository.cs) |
@@ -583,14 +608,16 @@ flowchart LR
         NewFilter[New filter class]
         FilterPort --> ExistingFilter
         FilterPort --> NewFilter
-        PricingSteps[StandardPricingPolicy: tax / shipping steps]
-        NewTaxRule[New tax-rule subclass example]
-        PricingSteps -. override one step .-> NewTaxRule
+        Selector[PricingPolicySelector]
+        StdStrategy[StandardPricingPolicy]
+        NewStrategy[New IPricingStrategy class]
+        Selector --> StdStrategy
+        Selector -. registered with one DI line .-> NewStrategy
     end
     subgraph LSP["L — Liskov Substitution"]
-        PricePort[IPricingPolicy contract]
+        PricePort[IPricingStrategy contract]
         Standard[StandardPricingPolicy]
-        Sale[Subclass or other policy example]
+        Sale[Any other strategy example]
         PricePort --> Standard
         PricePort -. equivalent contract .-> Sale
     end
@@ -619,7 +646,7 @@ flowchart LR
 | Principle group | What the shown blocks own | Code references |
 |---|---|---|
 | **SRP** | Controller translates HTTP; checkout service coordinates; `Order` validates invariants; repository persists. | [OrdersController.cs](../backend/src/IplStore.Api/Controllers/OrdersController.cs), [CheckoutService.cs](../backend/src/IplStore.Application/Orders/CheckoutService.cs), [Order.cs](../backend/src/IplStore.Domain/Orders/Order.cs), [OrderRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/OrderRepository.cs) |
-| **OCP** | Existing and new catalog filters implement one filter contract; query composition consumes the collection. A new GST or shipping rule is a `StandardPricingPolicy` subclass that overrides one step and is registered in DI. | [ICatalogFilter](../backend/src/IplStore.Infrastructure/Queries/CatalogFilters/ICatalogFilter.cs), [one class per filter](../backend/src/IplStore.Infrastructure/Queries/CatalogFilters/), [CatalogQueries.cs](../backend/src/IplStore.Infrastructure/Queries/CatalogQueries.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs) |
+| **OCP** | Existing and new catalog filters implement one filter contract; query composition consumes the collection. Pricing works the same way: every `IPricingStrategy` is registered and the selector consumes the collection, so a new strategy is a new class plus one `AddPricingStrategy<T>()` line. | [ICatalogFilter](../backend/src/IplStore.Infrastructure/Queries/CatalogFilters/ICatalogFilter.cs), [one class per filter](../backend/src/IplStore.Infrastructure/Queries/CatalogFilters/), [CatalogQueries.cs](../backend/src/IplStore.Infrastructure/Queries/CatalogQueries.cs), [PricingPolicySelector.cs](../backend/src/IplStore.Application/Pricing/PricingPolicySelector.cs), [Application DI](../backend/src/IplStore.Application/DependencyInjection.cs) |
 | **LSP** | Pricing implementations must honor the same valid-input and price-breakdown contract. | [IPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/IPricingPolicy.cs), [StandardPricingPolicy.cs](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs) |
 | **ISP** | Order writes and order-history reads use distinct ports and adapters. | [IOrderRepository.cs](../backend/src/IplStore.Application/Orders/IOrderRepository.cs), [IOrderQueries.cs](../backend/src/IplStore.Application/Orders/IOrderQueries.cs), [OrderRepository.cs](../backend/src/IplStore.Infrastructure/Repositories/OrderRepository.cs), [OrderQueries.cs](../backend/src/IplStore.Infrastructure/Queries/OrderQueries.cs) |
 | **DIP** | Application use cases depend on application-owned abstractions; Infrastructure supplies implementations via DI. | [CheckoutService.cs](../backend/src/IplStore.Application/Orders/CheckoutService.cs), [Application DI](../backend/src/IplStore.Application/DependencyInjection.cs), [Infrastructure DI](../backend/src/IplStore.Infrastructure/DependencyInjection.cs), [CompositionRoot.cs](../backend/src/IplStore.Api/Composition/CompositionRoot.cs) |
@@ -627,7 +654,7 @@ flowchart LR
 | Principle | Evidence in this codebase | What not to overclaim |
 |---|---|---|
 | **S** | Controllers translate HTTP; services coordinate use cases; aggregates enforce rules; repositories persist; pricing policy calculates prices. | A class can still grow too large. Review responsibilities as features are added. |
-| **O** | Add an `ICatalogFilter` implementation and register it; override `CalculateTax` / `CalculateShipping` in a `StandardPricingPolicy` subclass, or add a whole new `IPricingPolicy`. | OCP is not “never edit any existing file.” Registration, mapping, and tests may need changes. |
+| **O** | Add an `ICatalogFilter` implementation and register it; add an `IPricingStrategy` (often a `StandardPricingPolicy` subclass overriding one step) and register it with `AddPricingStrategy<T>()`. | OCP is not “never edit any existing file.” Registration, mapping, and tests may need changes. |
 | **L** | Implementations must honor the port contract. A pricing policy must return valid, internally consistent totals; a repository must preserve the transaction/locking semantics its use case relies on. | Implementing the same interface is insufficient if behavior differs. Contract tests are useful. |
 | **I** | Read query ports and write repository ports are separate. Consumers depend on smaller interfaces than a single all-purpose data service. | Keep interfaces cohesive; don’t create one-interface-per-method without a reason. |
 | **D** | Application defines ports; Infrastructure implements them; the composition root chooses concrete classes through DI. | The API composition root still depends on concrete projects to wire the application. That is intentional. |
@@ -636,7 +663,7 @@ flowchart LR
 
 Variable behavior is primarily composed through injected interfaces: `CheckoutService` receives `IPricingPolicy`, repositories, and `IUnitOfWork`. That lets behavior vary without subclassing the checkout service. The project still uses inheritance where it fits a framework/type relationship, such as exception types and the specialized read-only DbContext. The goal is to avoid inheritance as the default extension mechanism, not to ban it absolutely.
 
-One deliberate use of inheritance is **inside** the pricing strategy: `StandardPricingPolicy` is a Template Method. Its steps are not independent — GST is charged on the amount after any adjustment, and rounding must happen once — so `Calculate` owns the order and rounding and a subclass overrides one step. Callers still depend only on `IPricingPolicy` (composition). If several rules of one kind had to be combined (GST by category **and** regional shipping **and** stacked offers), the next step would be composed step strategies (`ITaxPolicy`, `IShippingPolicy`, ...); that is not built because the brief does not need it.
+One deliberate use of inheritance is **inside** the pricing strategy: `StandardPricingPolicy` is a Template Method. Its steps are not independent — GST is charged on the amount after any adjustment, and rounding must happen once — so `Calculate` owns the order and rounding and a subclass overrides one step. Choosing **between** strategies is composition: every `IPricingStrategy` is injected into `PricingPolicySelector` as a collection, and callers depend only on `IPricingPolicy`. If several rules had to apply **together** to one basket (stacked offers), the next step would be composed rules inside a strategy (e.g. an `IDiscountRule` collection); that is not built because the brief does not need it.
 
 ## 6. Patterns in Use
 
@@ -647,7 +674,7 @@ One deliberate use of inheritance is **inside** the pricing strategy: `StandardP
 | Unit of Work | `IUnitOfWork` / `EfUnitOfWork` | Gives a use case one commit/rollback and retry boundary. |
 | Aggregate Root / DDD | `Cart`, `Order` | Business invariants are enforced at domain entry points. |
 | Factory Method | `Order.Place(OrderPlacement)` | An order is created only after validating its invariants. |
-| Strategy | `IPricingPolicy` / `StandardPricingPolicy` | Pricing algorithm can change without changing callers. |
+| Strategy (with a selector as context) | `IPricingStrategy` implementations, `PricingPolicySelector` as the `IPricingPolicy` | Several pricing algorithms registered side by side; the right one is picked per request without changing callers. |
 | Template Method | `StandardPricingPolicy.Calculate` with `protected virtual` `CalculateTax` / `CalculateShipping` | A new tax or shipping rule overrides one step; order of steps and rounding stay in one place. |
 | Value Object | `PriceBreakdown`, `CartPolicy`, `OrderLine` | The price travels as one object from policy → order → API; `PriceBreakdown` is stored with an EF Core complex property. |
 | Mapper / Projection | `OrderSummaryDto.Projection`, `OrderDetailsDto.From`, `OrderLineDto.From`, `PriceSummaryDto.From` | One mapping per DTO; the list projection is an expression so EF still selects only its columns. |
@@ -785,7 +812,9 @@ flowchart TB
     Root --> InfraDI[Infrastructure DI]
     AppDI -->|ICheckoutService| Checkout[CheckoutService]
     AppDI -->|IPaymentService| Payment[PaymentService]
-    AppDI -->|IPricingPolicy singleton| Pricing[StandardPricingPolicy]
+    AppDI -->|IPricingPolicy singleton| Selector[PricingPolicySelector]
+    AppDI -->|IPricingStrategy, one per AddPricingStrategy| Strategies[StandardPricingPolicy and any other strategies]
+    Selector --> Strategies
     InfraDI -->|IPaymentGateway singleton| Gateway[FakePaymentGateway]
     InfraDI -->|IUnitOfWork| Uow[EfUnitOfWork]
     InfraDI -->|ICartRepository| CartRepo[CartRepository]
@@ -829,11 +858,17 @@ The SQL migrations, not EF migrations, own the schema. EF Core maps the schema t
 
 ### Change pricing behavior
 
-For a change to one rule (e.g. GST by category, region-based shipping), subclass `StandardPricingPolicy`, override `CalculateTax` or `CalculateShipping`, and register the subclass in [Application DI](../backend/src/IplStore.Application/DependencyInjection.cs). `StandardPricingPolicy` itself does not change; steps return unrounded amounts and the base class rounds once. If the rule needs more input (a category per line, a delivery region), add a property to `PricingRequest` / `PricingLine` — the step signatures take the whole request, so they do not change.
+Several pricing strategies can be live at once. To add one:
 
-For a completely different algorithm, implement `IPricingPolicy` directly and register it instead. Either way, existing cart and checkout callers still call `Calculate(PricingRequest)`.
+1. Create a class implementing `IPricingStrategy` — usually a `StandardPricingPolicy` subclass that overrides one step (`CalculateTax`, `CalculateShipping`) plus `Priority` and `AppliesTo`. Steps return unrounded amounts and the base class rounds once.
+2. Register it with one line in [Application DI](../backend/src/IplStore.Application/DependencyInjection.cs): `services.AddPricingStrategy<MyStrategy>();`
+3. Test it on its own, and add a selector test for which strategy wins.
 
-A new price **component** (for example a discount) is different: it changes the money model. Expect to touch `PriceBreakdown`, one step in `StandardPricingPolicy` (applied before tax), one line in the `ComplexProperty` mapping, a migration, `PriceSummaryDto` and the UI. `Order`, the queries, checkout and cart code do not change because the price travels as one `PriceBreakdown`.
+`PricingPolicySelector`, `StandardPricingPolicy`, cart and checkout do not change. If the strategy needs more input (a category per line, a delivery region), add a property to `PricingRequest` / `PricingLine` — the signatures take the whole request, so they do not change.
+
+**Injecting strategies.** `AddPricingStrategy<T>()` registers each strategy once (singleton) and exposes it three ways: `IPricingPolicy` (the selector's per-request choice — what cart and checkout use), `IEnumerable<IPricingStrategy>` (all of them, e.g. for a report or an admin "which price would apply" view) and the concrete class itself (one specific strategy, e.g. a quote service that must always use standard pricing). All three resolve to the same instance. Do not cast `IPricingPolicy` to a concrete type to choose a strategy — that couples the caller to one implementation and lets cart and checkout disagree.
+
+A new price **component** (for example a discount) is different: it changes the money model. Expect to touch `PriceBreakdown`, one step in `StandardPricingPolicy` (applied before tax, 0 by default), one line in the `ComplexProperty` mapping, a migration, `PriceSummaryDto` and the UI; the promotion itself is then a new strategy. `Order`, the queries, checkout and cart code do not change because the price travels as one `PriceBreakdown`.
 
 For different policies by customer, currency, or promotion, simply registering another implementation is not enough: inject a resolver/factory or a policy collection keyed by explicit criteria, then select the policy in the application layer. Add tests for the old and new cases. Keep cart preview and checkout on the same pricing decision so displayed totals match checkout.
 
@@ -922,7 +957,9 @@ For any requested change, answer these before typing:
 
 **Why pass whole objects inside, but DTOs at the API?** Inside the backend the price travels as one `PriceBreakdown` and queries hand the whole `Order` to one mapper per DTO, so a new field does not ripple through every caller. At the API boundary the DTO stays a separate, deliberate contract: returning the entity would leak internals (idempotency key, e-mail) and let any domain refactor silently change the JSON. Deliberate exception: `PaymentRequest` carries only what an external provider needs (least knowledge).
 
-**Why Template Method for pricing, not more interfaces?** The brief has one pricing rule set (GST + shipping). Making those two steps overridable gives an extension point for exactly what exists, keeps rounding and step order in one place, and avoids speculative abstractions (no discount hook, no per-rule interfaces) for features nobody asked for.
+**How do several pricing strategies coexist?** Each is registered as an `IPricingStrategy` with a priority and an `AppliesTo` rule; `PricingPolicySelector` — the only `IPricingPolicy` cart and checkout see — picks the highest-priority one that applies. That is the same "register many, consume the collection" pattern as the catalogue filters. Registering two `IPricingPolicy` implementations and casting at the call site would let cart and checkout choose differently; keyed services suit a key that comes from data (e.g. a contract's price list), not a rule about the basket.
+
+**Why Template Method inside a strategy?** The brief has one pricing rule set (GST + shipping). Making those two steps overridable gives an extension point for exactly what exists and keeps rounding and step order in one place, without speculative abstractions (no discount hook, no promo codes) for features nobody asked for.
 
 **Why interfaces?** To define an inward-facing contract and make implementations replaceable/testable. Avoid adding an interface when there is no meaningful boundary or substitution/testing need.
 
@@ -936,7 +973,7 @@ For any requested change, answer these before typing:
 | Browse flow | `Api/Controllers/ProductsController.cs`, `Application/Catalog/CatalogService.cs`, `Infrastructure/Queries/CatalogQueries.cs` |
 | Cart flow | `Api/Controllers/CartController.cs`, `Application/Carts/CartService.cs`, `Domain/Carts/Cart.cs`, `Infrastructure/Repositories/CartRepository.cs` |
 | Checkout flow | `Api/Controllers/OrdersController.cs`, `Application/Orders/CheckoutService.cs`, `Domain/Orders/Order.cs` |
-| Pricing | `Application/Pricing/StandardPricingPolicy.cs`, `Domain/Orders/PriceBreakdown.cs`, `Application/DependencyInjection.cs` |
+| Pricing | `Application/DependencyInjection.cs` (`AddPricingStrategy`), `Application/Pricing/PricingPolicySelector.cs`, `IPricingStrategy.cs`, `StandardPricingPolicy.cs`, `Domain/Orders/PriceBreakdown.cs` |
 | Order responses (DTO mapping) | `Application/Orders/OrderContracts.cs`, `Infrastructure/Queries/OrderQueries.cs`, `Infrastructure/Persistence/Configurations/OrderConfiguration.cs` |
 | Payment / cancel | `Application/Orders/PaymentService.cs`, `Application/Orders/IPaymentGateway.cs`, `Infrastructure/Payments/FakePaymentGateway.cs` |
 | Database transaction and stock | `Infrastructure/Persistence/EfUnitOfWork.cs`, `Infrastructure/Repositories/ProductRepository.cs` |
