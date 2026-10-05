@@ -110,15 +110,34 @@ sequenceDiagram
     C-->>UI: 201 Created + order JSON (PriceSummaryDto)
 ```
 
+Diagrams can't hold clickable links, so here is each checkout step with a link to the exact line:
+
+| # | Step | Code |
+|---|---|---|
+| 1 | Click "Place order"; one key per attempt | [CartPage.tsx:44](../frontend/src/pages/CartPage.tsx#L44) → [storeApi.ts:87 `placeOrder`](../frontend/src/api/storeApi.ts#L87) |
+| 2 | Add headers, send, retry safely | [httpClient.ts:84 `send`](../frontend/src/api/httpClient.ts#L84) |
+| 3 | Middleware: errors → CORS → rate limit | [CompositionRoot.cs:54-70](../backend/src/IplStore.Api/Composition/CompositionRoot.cs#L54-L70) |
+| 4 | Read customer, call the service | [OrdersController.cs:47 `PlaceOrder`](../backend/src/IplStore.Api/Controllers/OrdersController.cs#L47), [HeaderCurrentCustomerAccessor.cs](../backend/src/IplStore.Api/Identity/HeaderCurrentCustomerAccessor.cs) |
+| 5 | Start the use case | [CheckoutService.cs:72 `PlaceOrderAsync`](../backend/src/IplStore.Application/Orders/CheckoutService.cs#L72) |
+| 6 | Open transaction, with retry | [CheckoutService.cs:77](../backend/src/IplStore.Application/Orders/CheckoutService.cs#L77) → [EfUnitOfWork.cs:29 `ExecuteInTransactionAsync`](../backend/src/IplStore.Infrastructure/Persistence/EfUnitOfWork.cs#L29) |
+| 7 | Lock this customer's cart | [CheckoutService.cs:107](../backend/src/IplStore.Application/Orders/CheckoutService.cs#L107) → [CartRepository.cs:29 `GetOrCreateForUpdateAsync`](../backend/src/IplStore.Infrastructure/Repositories/CartRepository.cs#L29) |
+| 8 | Same key already used? Replay the order | [CheckoutService.cs:111](../backend/src/IplStore.Application/Orders/CheckoutService.cs#L111) → [OrderRepository.cs:17 `FindByIdempotencyKeyAsync`](../backend/src/IplStore.Infrastructure/Repositories/OrderRepository.cs#L17) |
+| 9 | Reserve stock per line, in product-id order | [CheckoutService.cs:137](../backend/src/IplStore.Application/Orders/CheckoutService.cs#L137) → [ProductRepository.cs:30 `TryReserveStockAsync`](../backend/src/IplStore.Infrastructure/Repositories/ProductRepository.cs#L30) |
+| 10 | Trigger updates the search table | [V002__catalog_read_model.sql:87 `products_project`](../database/migrations/V002__catalog_read_model.sql#L87) |
+| 11 | Price the order | [CheckoutService.cs:155](../backend/src/IplStore.Application/Orders/CheckoutService.cs#L155) → [PricingPolicySelector.cs:26](../backend/src/IplStore.Application/Pricing/PricingPolicySelector.cs#L26) → [StandardPricingPolicy.cs:35 `Calculate`](../backend/src/IplStore.Application/Pricing/StandardPricingPolicy.cs#L35) |
+| 12 | Create the order (rules checked) | [CheckoutService.cs:159](../backend/src/IplStore.Application/Orders/CheckoutService.cs#L159) → [Order.cs:50 `Place`](../backend/src/IplStore.Domain/Orders/Order.cs#L50) |
+| 13 | Save the order, empty the cart | [CheckoutService.cs:170-171](../backend/src/IplStore.Application/Orders/CheckoutService.cs#L170-L171) → [Cart.cs:105 `Clear`](../backend/src/IplStore.Domain/Carts/Cart.cs#L105) |
+| 14 | Commit; errors become problem JSON | [EfUnitOfWork.cs](../backend/src/IplStore.Infrastructure/Persistence/EfUnitOfWork.cs), [GlobalExceptionHandler.cs](../backend/src/IplStore.Api/ErrorHandling/GlobalExceptionHandler.cs) |
+
 The other flows use the same path with fewer steps:
 
 | Flow | Path |
 |---|---|
-| Search | `ProductListPage` → `ProductsController` → `CatalogService` → `CatalogQueries` (+ `ICatalogFilter`s, `CatalogSorting`) → `SELECT` from `product_catalog` |
-| View cart | `CartPage` → `CartController` → `CartService` → `CartQueries` → `PricingPolicySelector` for the totals |
-| Add to cart | `ProductDetailsPage` → `CartController` → `CartService` → `EfUnitOfWork` → `CartRepository` (lock) → `IdempotencyStore` → `Cart.AddItem` → commit |
-| Pay | `OrderPages` → `OrdersController` → `PaymentService` → `FakePaymentGateway` (outside the transaction) → `OrderRepository` (lock) → `Order` marked Paid |
-| Cancel | `OrderPages` → `OrdersController` → `PaymentService` → `Order` marked Cancelled → `ProductRepository.ReleaseStockAsync` |
+| Search | [ProductListPage.tsx:30](../frontend/src/pages/ProductListPage.tsx#L30) → [ProductsController.cs:25 `Search`](../backend/src/IplStore.Api/Controllers/ProductsController.cs#L25) → [CatalogService.cs:38 `SearchAsync`](../backend/src/IplStore.Application/Catalog/CatalogService.cs#L38) → [CatalogQueries.cs:26 `SearchAsync`](../backend/src/IplStore.Infrastructure/Queries/CatalogQueries.cs#L26) (runs each [ICatalogFilter](../backend/src/IplStore.Infrastructure/Queries/CatalogFilters/ICatalogFilter.cs) at [line 32](../backend/src/IplStore.Infrastructure/Queries/CatalogQueries.cs#L32), then [CatalogSorting](../backend/src/IplStore.Infrastructure/Queries/CatalogSorting.cs)) → `SELECT` from `product_catalog` |
+| View cart | [CartPage.tsx:13](../frontend/src/pages/CartPage.tsx#L13) → [CartController.cs:26 `Get`](../backend/src/IplStore.Api/Controllers/CartController.cs#L26) → [CartService.cs:58 `GetAsync`](../backend/src/IplStore.Application/Carts/CartService.cs#L58) → [CartQueries.cs:17 `GetAsync`](../backend/src/IplStore.Infrastructure/Queries/CartQueries.cs#L17) → totals from [CartService.cs:187](../backend/src/IplStore.Application/Carts/CartService.cs#L187) via [PricingPolicySelector](../backend/src/IplStore.Application/Pricing/PricingPolicySelector.cs#L26) |
+| Add to cart | [ProductDetailsPage.tsx:31](../frontend/src/pages/ProductDetailsPage.tsx#L31) → [CartController.cs:38 `AddItem`](../backend/src/IplStore.Api/Controllers/CartController.cs#L38) → [CartService.cs:64 `AddItemAsync`](../backend/src/IplStore.Application/Carts/CartService.cs#L64) → [EfUnitOfWork.cs:29](../backend/src/IplStore.Infrastructure/Persistence/EfUnitOfWork.cs#L29) → lock at [CartService.cs:80](../backend/src/IplStore.Application/Carts/CartService.cs#L80) ([CartRepository.cs:29](../backend/src/IplStore.Infrastructure/Repositories/CartRepository.cs#L29)) → key at [CartService.cs:82](../backend/src/IplStore.Application/Carts/CartService.cs#L82) ([IdempotencyStore.cs:20 `TryRecordAsync`](../backend/src/IplStore.Infrastructure/Persistence/IdempotencyStore.cs#L20)) → [Cart.cs:50 `AddItem`](../backend/src/IplStore.Domain/Carts/Cart.cs#L50) → commit |
+| Pay | [OrderPages.tsx:134](../frontend/src/pages/OrderPages.tsx#L134) → [OrdersController.cs:85 `Pay`](../backend/src/IplStore.Api/Controllers/OrdersController.cs#L85) → [PaymentService.cs:53 `PayAsync`](../backend/src/IplStore.Application/Orders/PaymentService.cs#L53) → [FakePaymentGateway.cs:23 `ChargeAsync`](../backend/src/IplStore.Infrastructure/Payments/FakePaymentGateway.cs#L23) (outside the transaction, called at [PaymentService.cs:68](../backend/src/IplStore.Application/Orders/PaymentService.cs#L68)) → lock at [OrderRepository.cs:24 `FindForUpdateAsync`](../backend/src/IplStore.Infrastructure/Repositories/OrderRepository.cs#L24) → [Order.cs:106 `MarkPaid`](../backend/src/IplStore.Domain/Orders/Order.cs#L106) |
+| Cancel | [OrderPages.tsx:145](../frontend/src/pages/OrderPages.tsx#L145) → [OrdersController.cs:95 `Cancel`](../backend/src/IplStore.Api/Controllers/OrdersController.cs#L95) → [PaymentService.cs:104 `CancelAsync`](../backend/src/IplStore.Application/Orders/PaymentService.cs#L104) → [Order.cs:125 `Cancel`](../backend/src/IplStore.Domain/Orders/Order.cs#L125) → [PaymentService.cs:120](../backend/src/IplStore.Application/Orders/PaymentService.cs#L120) → [ProductRepository.cs:46 `ReleaseStockAsync`](../backend/src/IplStore.Infrastructure/Repositories/ProductRepository.cs#L46) |
 
 ---
 
