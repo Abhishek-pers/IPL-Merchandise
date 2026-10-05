@@ -57,7 +57,9 @@ resource "azurerm_postgresql_flexible_server_active_directory_administrator" "ad
   resource_group_name = azurerm_resource_group.main.name
   tenant_id           = data.azurerm_client_config.current.tenant_id
   object_id           = each.key
-  principal_name      = each.value.principal_name
+  # PostgreSQL role names are at most 63 characters and Azure stores the name truncated; truncating
+  # here too keeps long guest UPNs (…#EXT#@…onmicrosoft.com) from forcing a replacement on every plan.
+  principal_name      = substr(each.value.principal_name, 0, 63)
   principal_type      = each.value.principal_type
 }
 

@@ -21,7 +21,10 @@ release ships. Live dev environment: resource group `rg-iplstore-dev` (Central I
 
 1. **State storage** (once per subscription): `scripts/bootstrap-tfstate.ps1`.
    Terraform cannot create the place it keeps its own state. Entra auth only, no keys, blob versioning on.
-2. **Infrastructure** (when `infra/**` changes): Terraform.
+2. **Infrastructure** (when `infra/**` changes): Terraform. One command does all of it, including the
+   first-run "registry, then image, then everything else" order:
+   `./scripts/provision-infra.ps1` (add `-PlanOnly` to preview, `-Deploy` to run the first release after it).
+   The manual equivalent:
    ```powershell
    cd infra/terraform
    $env:ARM_SUBSCRIPTION_ID = az account show --query id -o tsv
